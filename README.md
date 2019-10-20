@@ -4,14 +4,32 @@ This repository is dedicated to simulating elementary particle physics from
 so called "dark sector": hypothetical dark matter mediators, axion-like
 particles, light thermal dark matter and so on.
 
+## Installation Procedure
+
+The library is supposed to be build in the standard out-of-source way:
+
+* clone the repo with
+    $ git clone <repo-addr>
+* make the build dir and `cd` to it
+    $ mkdir <build-dir>
+    $ cd -
+* configure the project with your system defaults
+    $ cmake ../<repo-src>
+* build the lib
+    $ make
+* (optional) install the library
+    # make install
+
+Note: installation of this library is an option. One can use it right from the
+build directory. However, for better compatibility it is recommended to install
+it at least locally -- in this case `-DDESTDIR=<local-prefix>` has to be given
+to `cmake` util at step 4.
+
 # Models Included in Repo
 
-The purpose of this repo is, of course not to cover every aspect of the dark
-sector theory, but rather to help people to gain some numerical predictions for
-relevant phenomenology concerning few well-elaborated models that appeared up
-to the time.
+The following models are currently included in the repo:
 
-## Dark Photon Particle and Corresponding Production Processes
+## Dark Photon Particle Production by Scattering on Nucleus
 
 "Dark photon" is massive vector-like mediator particle supposingly
 participating in electromagnetic processes to which it is weakly coupled. We
@@ -27,10 +45,10 @@ the versioning symlinks will be created after build and installation stages.
 All the relevant code is located in top level `include/` and `src/` directories
 as a common practice for single-library projects.
 
-Optionally, testing toolkit may be built. It provides some basic testing
-fixtures for testing and debugging the procedures (unit tests are provided as
-well). See corresponding readme file(s) within `tests/` directory for
-instructive descriptions.
+Optionally, the testing tools may be built. They provide some basic testing
+fixtures for representative plots and unit testing.
+See corresponding readme file(s) within `tests/` directory for instructive
+descriptions.
 
 ## Notes on File Structure and Code Guidelines
 

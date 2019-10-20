@@ -25,6 +25,7 @@
 # define muP    _DPhMC_CST_muProton
 # define mp     _DPhMC_CST_protonMass_GeV
 
+/* This type is local C-structure, hidden for other units. */
 struct Workspace {
     struct dphmc_APrimeWSParameters parameterSet;
     double chi, tRange[2], chiRelError, chiAbsError;
@@ -96,6 +97,13 @@ dphmc_print_aprime_ws_parameters( FILE * f
               , p->epsabs, p->epsrel, p->epsrelIncFt, p->limit, p->nnodes );
 }
 
+/**The physical parameters should be provided by pointer on corresponding
+ * const structure. This data is then copied to the "workspace" object that
+ * stores also some intermediate caches needed to compute the cross-section
+ * values.
+ *
+ * @param n nodes for GSL integration workspace (see GSL QAGS);
+ * @returns -1 on error, 0 on success */
 int
 dphmc_init_aprime_cs_workspace( const struct dphmc_APrimeWSParameters * newPs
                               , void ** wsPtr_ ) {
@@ -246,6 +254,10 @@ chi_integrand(double t, void * ws_) {
 }
 
 
+/**For given nuclei parameters, calculates integrated photons flux
+ * involving GSL integration procedure.
+ *
+ * see \ref{JDBjorken} (A17). */
 double
 dphmc_aprime_chi( double * absError
                 , double * relError
@@ -310,6 +322,9 @@ dphmc_aprime_chi( double * absError
     return chi_;
 }
 
+/**Represents volatile part of function \f$d \d sigma / d x\f$
+ * corrsponding to non-normalized PDF, that may be of use in generators that
+ * does not require angular distribution. */
 double
 dphmc_aprime_unnormed_pdf_a12( double x
                              , double theta
@@ -331,6 +346,15 @@ dphmc_aprime_unnormed_pdf_a12( double x
     return res;
 }
 
+/**Calculates sigma according to (A12) formula \cite{JDBjorken}, returning
+ * result of numerical calculation of the following value:
+ * \f[
+ * \frac{1}{E_{0}^2 x} \frac{ d \sigma_{ 2 \rightarrow 3 } }{ d x d \cos{\theta_{A'}} }
+ * \f]
+ *
+ * This relation includes calculation of constant term that is not needed for
+ * simulation purposes. For the event generation purposes, se the "unnormed
+ * PDF" function dphmc_aprime_unnormed_pdf_a12() instead. */
 double
 dphmc_aprime_cross_section_a12( double x
                               , double theta
@@ -348,6 +372,9 @@ dphmc_aprime_cross_section_a12( double x
     return res * (ps->factor);
 }
 
+/**Represents function \f$d \d sigma / d x\f$
+ * corrsponding to dfferential by emitted A' energy cross section, that may be
+ * useful in generators that does not require angular distribution. */
 double
 dphmc_aprime_cross_section_a14( double x
                               , void * ws_ ) {
@@ -394,6 +421,11 @@ _static_ww_aprime_cs_wrapper( double * x, size_t dim, void * params ) {
     return dphmc_aprime_cross_section_a12( x[0], x[1], params );
 }
 
+/**Performs Gauss-Kronrod integration procedure of
+ * dphmc_aprime_cross_section_a14(). Faster then dphmc_aprime_ww_full_numeric_2(),
+ * but yields a less-precise value.
+ * @todo: is still inefficient for MC generator. Consider to move it to
+ * testing */
 double
 dphmc_aprime_ww_full_numeric_1( void * ws_
                               , double epsabs
@@ -460,6 +492,9 @@ dphmc_aprime_ww_full_numeric_1( void * ws_
     return sigma;
 }
 
+/**Performs VEGAS two-folded integration of
+ * dphmc_aprime_unnormed_pdf_a12().
+ * @todo: may be precise, but is extemely inefficient. Move it to testing? */
 double
 dphmc_aprime_ww_full_numeric_2( void * ws_
                               , size_t nCalls
@@ -498,3 +533,7 @@ dphmc_aprime_ww_full_numeric_2( void * ws_
     return result;
 }
 
+/**Used mainly by accept-reject (direct von Neumann) sampling method */
+double dphmc_aprime_ww_upper_limit( void * ws ) {
+    # warning "Here be dragons"
+}

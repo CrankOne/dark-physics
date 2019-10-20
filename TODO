@@ -1,0 +1,3 @@
+1. Add the bibliography to Doxygen, get rid of curly brackets in \cite{Bjorken}
+2. Exclude tests/ dir from doxygen input
+3. Implement the default generator for WW Em model of A'

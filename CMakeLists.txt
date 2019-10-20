@@ -29,7 +29,7 @@ if( ${CMAKE_BUILD_TYPE} STREQUAL "Debug" )
         # and put it to the sources directory. We do not include it in repo by
         # default since code coverage tests is not something average user would
         # do.
-        include(${CMAKE_SOURCE_DIR}/CodeCoverage.cmake
+        include(${CMAKE_SOURCE_DIR}/.CodeCoverage.cmake
                 RESULT_VARIABLE CODECOV_ENABLED)
         APPEND_COVERAGE_COMPILER_FLAGS()
         # TODO: line below takes no effect

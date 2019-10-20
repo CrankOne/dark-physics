@@ -6,6 +6,8 @@
 # include <set>
 # include <unordered_map>
 
+struct dphmc_APrimeWSParameters;
+
 namespace dphmc {
 
 /**@brief A Weizsacker-Williams based approximation model for A' particle
@@ -63,6 +65,24 @@ public:
                                         , G4double * energy
                                         , G4double * theta
                                         , G4double * phi ) const = 0;
+    };
+
+    /// Default generator for A' based on uniform accept-reject method
+    class DefaultGenerator : public AbstractGenerator {
+    private:
+        void * fWs; ///< A ptr to workspace object used for generator
+    public:
+        /// Constructs workspace with given parameters
+        DefaultGenerator( const dphmc_APrimeWSParameters & );
+        /// Clears workspace
+        ~DefaultGenerator();
+        /// Forwards call to dphmc_aprime_ww_fast_integral_estimation()
+        virtual G4double GetFullCrossSection() const override;
+        /// Exploits the direct accept-reject method (von Neumann). See dphmc_aprime_unnormed_pdf_a12()
+        virtual G4double ShootKinematics( const G4double projectileEnergy
+                                        , G4double * energy
+                                        , G4double * theta
+                                        , G4double * phi ) const override;
     };
 
     /// A key-like structure uniquely identifying the particular generator obj
