@@ -1,7 +1,7 @@
 # ifndef H_DPHMC_TEST_APRIME_WW_H
 # define H_DPHMC_TEST_APRIME_WW_H
 
-# include "numerics/aprime-cs.h"
+# include "models/ww-approx.h"
 
 # include <vector>
 

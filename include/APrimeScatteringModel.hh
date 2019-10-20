@@ -17,8 +17,10 @@ class APrimeGenerator;
 ///physics model.
 class APrimeScatteringModel {
 public:
-    /// Based on material parameters and incident particle energy and type,
-    /// returns a full (integrated) cross section value.
+    ///@brief Based on material parameters and incident particle energy and type,
+    /// shall return a full (integrated) cross section value.
+    ///@details If, by any condition is out of consideration, shall return
+    /// quiet NaN if `G4double` supports it or 0. if quiet NaN is not supported.
     virtual G4double GetFullCrossSection( G4double incidentParticleEnergy
                                       , const G4ParticleDefinition * pDef
                                       , const G4Element * g4Element ) = 0;
@@ -28,6 +30,8 @@ public:
     /// For the purpose of weighted tests, must return a statistical weight
     /// when possible. For the models that does not supply this information,
     /// 0 has to be returned.
+    /// If, by any condition is out of consideration, shall return
+    /// quiet NaN if `G4double` supports it or 0. if quiet NaN is not supported.
     virtual G4double GenerateOn( G4double incidentParticleEnergy
                                , const G4ParticleDefinition * pDef
                                , const G4Element * g4Element

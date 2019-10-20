@@ -6,8 +6,8 @@
 
 namespace dphmc {
 
-/**\class APrime
- * \brief Defines an A' particle («dark photon») in the Geant4 API terms.
+/**@class APrime
+ * @brief Defines an A' particle («dark photon») in the Geant4 API terms.
  *
  * Definition of a custom particle in Geant4 is required to represent
  * all connected process. A' does not participate in any interactions
@@ -18,10 +18,10 @@ namespace dphmc {
  *
  * All the particles in Geant4 are implemented as singletons.
  *
- * \todo In the Definition() there are a lot of unknown/wrong information
+ * @todo In the Definition() there may be some of unknown/wrong information
  * about this particle that must be corrected further (isospin numbers,
  * mass, leptonic number, etc).
- * \todo Decay physics is incomplete and not checked yet.
+ * @todo Decay physics is incomplete and not checked yet.
  */
 class APrime : public G4ParticleDefinition {
 public:

@@ -1,6 +1,6 @@
 # include "dphmc-test-aprime-ww.hpp"
 
-# include "gtest/gtest.h"
+# include <gtest/gtest.h>
 
 /// Ref. values for chi on W, beam E -- 1GeV, depending on mA, for check
 static const double tungst200MeV_chi[] = {

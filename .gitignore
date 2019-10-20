@@ -1,3 +1,4 @@
+CodeCoverage.cmake
 *.swp
 *.swo
 *.pyc

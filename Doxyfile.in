@@ -2117,7 +2117,8 @@ SKIP_FUNCTION_MACROS   = YES
 # the path). If a tag file is not located in the directory in which doxygen is
 # run, you must also specify the path to the tagfile here.
 
-TAGFILES               = @STL_CPP_TAGFILE@=http://en.cppreference.com/w/
+TAGFILES               = @STL_CPP_TAGFILE@=http://en.cppreference.com/w/ \
+                         @GEANT4_CPP_TAGFILE@=http://www-geant4.kek.jp/Reference/@Geant4_CANONICAL_VERSION@/
 
 # When a file name is specified after GENERATE_TAGFILE, doxygen will create a
 # tag file that is based on the input files it reads. See section "Linking to
@@ -2245,7 +2246,9 @@ CLASS_GRAPH            = YES
 # The default value is: YES.
 # This tag requires that the tag HAVE_DOT is set to YES.
 
-COLLABORATION_GRAPH    = YES
+# NOTE: enabling this diagrams with Geant4 tagfile being included blows up the
+# graphs.
+COLLABORATION_GRAPH    = NO
 
 # If the GROUP_GRAPHS tag is set to YES then doxygen will generate a graph for
 # groups, showing the direct groups dependencies.
@@ -2260,7 +2263,7 @@ GROUP_GRAPHS           = YES
 # The default value is: NO.
 # This tag requires that the tag HAVE_DOT is set to YES.
 
-UML_LOOK               = NO
+UML_LOOK               = YES
 
 # If the UML_LOOK tag is enabled, the fields and methods are shown inside the
 # class node. If there are many fields or methods and many nodes the graph may

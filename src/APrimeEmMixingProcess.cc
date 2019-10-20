@@ -1,5 +1,7 @@
 # include <Randomize.hh>
 
+# include <limits>
+
 # include "APrimeEmMixingProcess.hh"
 # include "APrimeScatteringModel.hh"
 
@@ -64,7 +66,9 @@ APrimeEmMixingProcess::GetMeanFreePath( const G4Track & aTrack,
     for( auto it = elList.cbegin(); elList.cend() != it; ++it, ++nEl ) {
         G4Element & el = **it;
         G4double val = fModelPtr->GetFullCrossSection( incidentE, aTrack.GetDefinition(), &el );
-        if( ! std::isfinite( val ) ) continue;  // not appliable for this element
+        if( (std::numeric_limits<G4double>::has_quiet_NaN && std::isnan( val ))
+         || val <= 0. )
+            continue;  // not appliable for this element
         val *= aTrack.GetMaterial()->GetVecNbOfAtomsPerVolume()[nEl];
         lambdaInv += val;
     }

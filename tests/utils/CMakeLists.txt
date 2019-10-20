@@ -3,8 +3,9 @@ cmake_minimum_required( VERSION 3.2 )
 file( GLOB_RECURSE DarkPhysicsNA64_test_utils_SOURCES *.c* )
 
 file( GLOB_RECURSE DarkPhysicsNA64_test_utils_SOURCES
-      "*.cpp" )
+      "*.c*" )
 
+# Note: produced executables are not sensitive for build suffix.
 foreach(file_path ${DarkPhysicsNA64_test_utils_SOURCES})
     string( REPLACE ".cpp" "" new_name ${file_path} )
     get_filename_component(filename ${new_name} NAME)
