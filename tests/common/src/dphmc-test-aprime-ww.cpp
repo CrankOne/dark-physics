@@ -3,86 +3,154 @@
 # include <stdexcept>
 # include <cassert>
 # include <cmath>
+# include <tuple>
 
 namespace dphmc {
 namespace test {
+
+
+
+ExpValues::ExpValues( size_t n_, double low_, double up_ )
+        : _nPoints(n_), _low(low_), _up(up_), _current(_low)
+        , _step( pow(_up/_low, 1./(_nPoints - 1)) ) {}
+
+double
+ExpValues::value() const {
+    return _current;
+}
+
+bool
+ExpValues::good() const {
+    return _current <= _up + _step*1e-1;
+}
+
+double
+ExpValues::operator++() {
+    _current *= _step;
+    return _current;
+}
+
+
 
 double
 chi_bjorken( double * x, double * p ) {
     const double EBeam = p[0],
                  APMass = x[0];
-    void * ws = NULL;
     // These parameters are somewhat comon ones. They are hardcoded here since
     // for \chi tests we usually want a reproducible tests.
-    dphmc_APrimeWSParameters aps = {
+    aprime::PhysParameters aps = {
             /* Z ............... */ (uint16_t) p[2], //p[2] 74,
             /* A ............... */ p[1],  //183.84,
             /* mass A', GeV .... */ APMass,
             /* E beam, GeV ..... */ EBeam,
             /* mixing factor ... */ 1e-4,
             /* re-norm factor .. */ 1,
+            /* theta cut-off c . */ 100
+    };
+    IterativeQAGSParameters qagsp = {
             /* epsabs .......... */ 1e-12,
             /* epsrel .......... */ 1e-12,
             /* epsrelIncFt ..... */ 1.1,
             /* limit ........... */ (size_t) 1e3,
             /* nnodes .......... */ (size_t) 1e3
     };
-    dphmc_init_aprime_cs_workspace( &aps, &ws );
+    aprime::WWCaches * caches = dphmc_aprime_new( &aps, &qagsp
+                                                , dphmc_aprime_form_factor_elastic
+                                                , dphmc_aprime_form_factor_inelastic
+                                                , 0x0 );
     if( dphmc_error ) {
-        dphmc_free_aprime_cs_workspace( ws );
+        dphmc_aprime_delete( caches );
         throw std::runtime_error( "Failed to initialize CS-workspace for A'." );
     }
     double absErr, relErr;
-    double chiRes = dphmc_aprime_chi( &absErr, &relErr, ws );
-    dphmc_free_aprime_cs_workspace( ws );
+    double chiRes = dphmc_aprime_ww_photon_flux_for( std::nan("unused")
+                                                   , std::nan("unused")
+                                                   , caches );
+    dphmc_aprime_delete( caches );
     return chiRes/(p[2]*p[2]);
 }
 
+
+
 std::vector<DCrossSectionPoint>
-aprime_dcs_ww( const dphmc_APrimeWSParameters & apcsPs
+aprime_dcs_ww( const aprime::PhysParameters & apcsPs
+             , const IterativeQAGSParameters & qagsp
              , size_t xNPts, size_t tNPts
              , double * xRange, double * thetaRange ) {
     assert( xNPts > 1 );
     assert( tNPts > 1 );
-    void * ws = NULL;
-    dphmc_init_aprime_cs_workspace( &apcsPs, &ws );
+    aprime::WWCaches * caches = dphmc_aprime_new( &apcsPs, &qagsp
+                                        , dphmc_aprime_form_factor_elastic
+                                        , dphmc_aprime_form_factor_inelastic
+                                        , 0x0 );
 
     double & xLow = xRange[0],      & xUp = xRange[1]
          , & tLow = thetaRange[0],  & tUp = thetaRange[1]
          ;
 
-    xLow = dphmc_aprime_lower_cut_x(ws);
-    xUp = dphmc_aprime_upper_cut_x(ws);
-    tUp = dphmc_aprime_upper_cut_theta(ws);
+    xLow = dphmc_aprime_lower_cut_x(caches);
+    xUp = dphmc_aprime_upper_cut_x(caches);
+    tUp = dphmc_aprime_upper_cut_theta(caches);
     tLow = 1e-9;  // todo: in case of Born approximation, has to be mitigated
 
     assert( xLow < xUp );
     assert( tLow < tUp );
     std::vector<DCrossSectionPoint> pts;
-    # if 0  // evenly-spaced
-    const double xStep = (xUp - xLow)/(xNPts - 1)
-               , tStep = (tUp - tLow)/(tNPts - 1);
-    assert( xStep > 0 );
-    assert( tStep > 0 );
-    for( double x = xLow; x <= xUp; x += xStep ) {
-        for( double theta = tLow; theta <= tUp; theta += tStep ) {
-            assert( pts.size() <= xNPts*tNPts );
-            pts.push_back( {x, theta, dphmc_aprime_cross_section_a12( x, theta, ws )} );
-        }
-    }
-    # else  // logarithmically-spaced
-    const double tX     = pow( ( 1 - xLow)/(1 - xUp), 1./(xNPts-1) )
-               , tTheta = pow( tUp/tLow, 1./(tNPts-1) )
-               ;
-    for( double x_ = (1 - xUp); x_ <= (1 - xLow)*(1 + 1e-3); x_ *= tX ) {
-        for( double theta = tLow; theta <= tUp*(1 + 1e-3); theta *= tTheta ) {
-            double x = 1 - x_;
-            pts.push_back( {1 - x, theta, dphmc_aprime_cross_section_a12( x, theta, ws )} );
+
+    for( ExpValues evX( xNPts, 1 - xUp, 1 - xLow )
+       ; evX.good()
+       ; ++evX ) {
+        double x = 1 - evX.value();
+        void * saThetaCache = dphmc_aprime_ww_new_sa_theta_max_cache( x, caches );
+        double absErr;
+        for( ExpValues evTheta( tNPts, tLow, tUp )
+           ; evTheta.good()
+           ; ++evTheta ) {
+            pts.push_back( { evX.value()
+                           , evTheta.value()
+                           , dphmc_aprime_cross_section_a12( x, evTheta.value(), caches )
+                           , dphmc_aprime_ww_d2_theta_function( evTheta.value(), saThetaCache )
+                           , dphmc_aprime_ww_n_theta_function( x, evTheta.value(), caches, 1e-9, &absErr )
+                           , absErr
+                           } );
             assert( pts.size() <= xNPts*tNPts );
         }
+        // Free temporary caches valid for certain x only
+        dphmc_aprime_ww_free_sa_theta_max_cache( saThetaCache );
     }
-    # endif
-    dphmc_free_aprime_cs_workspace( ws );
+    dphmc_aprime_delete( caches );
+    return pts;
+}
+
+
+
+std::vector< std::tuple<double, double, double> >
+aprime_dcs_max( const aprime::PhysParameters & apcsPs
+              , const IterativeQAGSParameters & qagsp
+              , size_t xNPts ) {
+    assert( xNPts > 1 );
+    aprime::WWCaches * caches = dphmc_aprime_new( &apcsPs, &qagsp
+                                        , dphmc_aprime_form_factor_elastic
+                                        , dphmc_aprime_form_factor_inelastic
+                                        , 0x0 );
+
+    double xLow = dphmc_aprime_lower_cut_x(caches)
+         , xUp = dphmc_aprime_upper_cut_x(caches);
+    assert( xLow < xUp );
+
+    std::vector< std::tuple<double, double, double> > pts;
+    const double tX1    = pow( ( 1 - xLow)/(1 - xUp), 1./(xNPts-1) );
+    for( double x_ = (1 - xUp); x_ <= (1 - xLow)*(1 + 1e-3); x_ *= tX1 ) {
+        double x = 1 - x_;
+        void * saThetaCache = dphmc_aprime_ww_new_sa_theta_max_cache( x, caches );
+        double thetaMax = dphmc_aprime_ww_theta_max_semianalytic( x, caches, saThetaCache );
+        dphmc_aprime_ww_free_sa_theta_max_cache( saThetaCache );
+        if( std::isfinite( thetaMax ) ) {
+            pts.push_back( std::tuple<double, double, double>( x_, thetaMax
+                        , dphmc_aprime_cross_section_a12( x, thetaMax, caches ) ) );
+        }
+    }
+    dphmc_aprime_delete( caches );
     return pts;
 }
 

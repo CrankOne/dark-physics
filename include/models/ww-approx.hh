@@ -2,13 +2,20 @@
 # define H_DPHMC_MODELS_APRIME_WW_APPROX_H
 
 # include "APrimeScatteringModel.hh"
+# include "models/ww-approx.h"
 
 # include <set>
 # include <unordered_map>
 
-struct dphmc_APrimeWSParameters;
-
 namespace dphmc {
+
+typedef struct ::dphmc_IterativeQAGSParameters IterativeQAGSParameters;
+
+namespace aprime {
+
+typedef struct ::dphmc_APrimePhysParameters PhysParameters;
+typedef struct ::dphmc_APrimeWWCaches       WWCaches;
+typedef struct ::dphmc_APrimeFormFactor     FormFactor;
 
 /**@brief A Weizsacker-Williams based approximation model for A' particle
  * production on nuclei.
@@ -39,6 +46,7 @@ namespace dphmc {
  * */
 class APrimeWWApproximation : public APrimeScatteringModel {
 public:
+    # if 0
     /// Common parameters of subsidiary numerical procedures
     struct Parameters {
         /// Absolute error used for Gauss-Kronrod integration of chi
@@ -53,6 +61,7 @@ public:
         /// Integration workspace nodes number used for Gauss-Kronrod integration
         size_t chiGKIntNNodes;
     };
+    # endif
 
     /// General Weiszacker-Williams event generator interface used by model.
     struct AbstractGenerator {
@@ -70,10 +79,14 @@ public:
     /// Default generator for A' based on uniform accept-reject method
     class DefaultGenerator : public AbstractGenerator {
     private:
-        void * fWs; ///< A ptr to workspace object used for generator
+        WWCaches * fCaches; ///< A ptr to workspace object used for generator
     public:
         /// Constructs workspace with given parameters
-        DefaultGenerator( const dphmc_APrimeWSParameters & );
+        DefaultGenerator( const PhysParameters & ps
+                        , const IterativeQAGSParameters & chiIntPars
+                        , double (*  elastic_f)( double, PhysParameters * )
+                        , double (*inelastic_f)( double, PhysParameters * )
+                        , int flags );
         /// Clears workspace
         ~DefaultGenerator();
         /// Forwards call to dphmc_aprime_ww_fast_integral_estimation()
@@ -110,10 +123,11 @@ private:
     /// Lowest charge number of nucleus under consideration. In Geant4's
     /// G4Element it is a float, so for compat it is float here as well.
     G4double fLowestZ;
-    /// Sorted set of energy ranges. Immutable, as its index is used to choose CS.
+    /// Sorted set of energy ranges. Immutable, as its index is used to choose
+    /// CS.
     std::set<G4double> fRanges;
-    /// Parameters instance
-    Parameters fModelParameters;
+    // Parameters instance
+    //Parameters fModelParameters;
     /// Associative container indexing all the generators created during the
     /// session by their energy range, material parameters, etc.
     GeneratorsIndex fGenerators;
@@ -156,7 +170,7 @@ public:
     /// purposes only.
     const std::set<G4double> & GetEnergyTabulation() const { return fRanges; }
 };
-
+}  // namespace ::dphmc::aprime
 }  // namespace dphmc
 
 # endif  // H_DPHMC_MODELS_APRIME_WW_APPROX_H

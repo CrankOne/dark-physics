@@ -1,5 +1,4 @@
 # include "models/ww-approx.hh"
-# include "models/ww-approx.h"
 # include "APrimeParticle.hh"
 
 # include <G4ParticleDefinition.hh>
@@ -10,7 +9,7 @@
 # include <limits>
 
 namespace dphmc {
-
+namespace aprime {
 
 bool
 APrimeWWApproximation::GeneratorKey::operator==(
@@ -35,24 +34,27 @@ APrimeWWApproximation::HashGeneratorKey::operator()(
  * May raise `std::runtime_exception` if dphmc_init_aprime_cs_workspace()
  * returns non-zero status. */
 APrimeWWApproximation::DefaultGenerator::DefaultGenerator(
-        const dphmc_APrimeWSParameters & wsPars ) : fWs(NULL) {
-    int rc = dphmc_init_aprime_cs_workspace( &wsPars
-                                           , &fWs );
-    if( rc ) {
+                  const PhysParameters & ps
+                , const IterativeQAGSParameters & chiIntPars
+                , double (*  elastic_f)( double, PhysParameters * )
+                , double (*inelastic_f)( double, PhysParameters * )
+                , int flags ) : fCaches(dphmc_aprime_new( &ps, &chiIntPars
+                        , elastic_f, inelastic_f, flags )) {
+    if( !fCaches ) {
         throw std::runtime_error( "Failed to allocate"
                 " workspace for default WW model's generator." );
     }
 }
 
 APrimeWWApproximation::DefaultGenerator::~DefaultGenerator() {
-    if( fWs ) {
-        dphmc_free_aprime_cs_workspace( fWs );
+    if( fCaches ) {
+        dphmc_aprime_delete( fCaches );
     }
 }
 
 G4double
 APrimeWWApproximation::DefaultGenerator::GetFullCrossSection() const {
-    return dphmc_aprime_ww_fast_integral_estimation( fWs );
+    return dphmc_aprime_ww_fast_integral_estimation( fCaches );
 }
 
 G4double
@@ -61,7 +63,7 @@ APrimeWWApproximation::DefaultGenerator::ShootKinematics(
                                         , G4double * energy
                                         , G4double * theta
                                         , G4double * phi ) const {
-    G4double ul = dphmc_aprime_ww_upper_limit( fWs );
+    G4double ul = dphmc_aprime_ww_upper_limit( fCaches );
     // ...
     throw std::runtime_error( "TODO: default generator with direct von Neumann." );
 }
@@ -164,21 +166,30 @@ APrimeWWApproximation::NewGenerator( G4double projELow, G4double projEUp
                                    , const G4Element * g4Element ) {
     // defined only for e-
     assert( pDef->GetPDGEncoding() == G4Electron::Definition()->GetPDGEncoding() );
-    struct dphmc_APrimeWSParameters ps {
+    PhysParameters ps {
                 /* Z ............... */ (uint16_t) g4Element->GetZ(),
                 /* A ............... */ g4Element->GetA(),
                 /* mass A', GeV .... */ APrime::Definition()->GetPDGMass()/CLHEP::GeV,
                 /* E beam, GeV ..... */ (projEUp + projELow)/(2*CLHEP::GeV),
                 /* mixing factor ... */ APrime::parameters.mixingFactor,
                 /* re-norm factor .. */ 1,
+                /* theta cut-off c . */ 100,  // TODO: configurable?
+                # if 0
                 /* epsabs .......... */ fModelParameters.chiGKIntAbsErr,
                 /* epsrel .......... */ fModelParameters.chiGKIntRelErr,
                 /* epsrelIncFt ..... */ fModelParameters.chiGKIntRelErrIncFt,
                 /* limit ........... */ (size_t) fModelParameters.chiGKIntLimit,
                 /* nnodes .......... */ (size_t) fModelParameters.chiGKIntNNodes
+                # endif
             };
-    return new DefaultGenerator( ps );
+    # warning "TODO: initialize chi integral parameters"
+    return new DefaultGenerator( ps, {  }  // <-- TODO
+                               , dphmc_aprime_form_factor_elastic
+                               , dphmc_aprime_form_factor_inelastic  // <-- TODO get rid for high Z?
+                               , 0x0  // <-- TODO configurable?
+                               );
 }
 
+}
 }
 

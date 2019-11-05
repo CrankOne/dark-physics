@@ -5,6 +5,7 @@
 # include <cstring>
 # include <unistd.h>
 # include <cassert>
+# include <tuple>
 
 # include "dphmc-test-aprime-ww.hpp"
 
@@ -46,7 +47,8 @@ bjorken_chi_ref_curves( const std::string & outputDir ) {
 void
 aprime_dcs_surf( const struct dphmc_APrimeWSParameters & ps
                , FILE * os
-               , size_t nPointsX, size_t nPointsTheta ) {
+               , size_t nPointsX, size_t nPointsTheta
+               , FILE * mxOs ) {
     fprintf( os, "# A' WW-approach configuration: \n# " );
     dphmc_print_aprime_ws_parameters( os, &ps );
     fprintf( os, "\n# number of points x, theta: %zu, %zu.\n"
@@ -56,12 +58,21 @@ aprime_dcs_surf( const struct dphmc_APrimeWSParameters & ps
                                             , xRange, thetaRange );
     fprintf( os, "# x range: %e, %e\n", xRange[0], xRange[1] );
     fprintf( os, "# theta range: %e, %e\n", thetaRange[0], thetaRange[1] );
-    fprintf( os, "# columns: x, theta, d \\sigma\n" );
+    fprintf( os, "# columns: x, theta, d \\sigma, d^2 \\sigma/d \\theta: s/a, -\"-: num, -\"-: num.err\n" );
     size_t xCounter = 0;
     for( auto pt : points ) {
-        fprintf( os, "%e\t%e\t%e\n", pt.x, pt.theta, pt.dCS );
+        // Write x, theta and diff sigma values
+        fprintf( os, "%e\t%e\t%e\t", pt.x, pt.theta, pt.dCS, pt.saDDTheta );
+        // Write semi-analytic and numerical estimation of diff sigma by theta
+        fprintf( os, "%e\t%e\t%e\n", pt.saDDTheta, pt.numDDTheta, pt.numDDThetaErr );
         if( ! ((++xCounter) % nPointsTheta) )
             fprintf( os, "\n" );
+    }
+    if( mxOs ) {
+        auto pts = aprime_dcs_max( ps, nPointsX );
+        for( auto pt : pts ) {
+            fprintf( mxOs, "%e\t%e\t%e\n", std::get<0>(pt), std::get<1>(pt), std::get<2>(pt) );
+        }
     }
 }
 
@@ -120,6 +131,7 @@ _print_usage( const char * appName, std::ostream & os ) {
         " [-i <GK-increment=1.1>]"
         " [-l <GK-limit=1000>]"
         " [-n <GK-nnodes=1000>]"
+        " [-X <max-output-file.dat>]"
         " -- writes reference points"
         " on differential cross-section surface for given parameters of"
         " calculation to the output dir. The -A and -Z set target atomic"
@@ -127,7 +139,8 @@ _print_usage( const char * appName, std::ostream & os ) {
         " and -m sets the A' hypothetical mass in GeV. Note that procedure uses"
         " GSL's Gauss-Kronrod integration method, so GK-prefixed parameters are"
         " related to it. See \"Numerical Integration\" section of `nfo gsl`"
-        " for detailed reference."
+        " for detailed reference. If -X option provided, its argument is"
+        " interpreted as output filename for theta_max value (at some x)."
        << std::endl;
     os << "    $ " << appName << " int ..."
        << std::endl;
@@ -136,10 +149,11 @@ _print_usage( const char * appName, std::ostream & os ) {
 static int
 _configure_aprime_pars_from_command_line( int argc, char * const argv[]
                                         , struct dphmc_APrimeWSParameters & ps
-                                        , size_t * nCalls ) {
+                                        , size_t * nCalls
+                                        , char ** maxOutFileNamePtr  ) {
     int c;
     opterr = 0;
-    while ((c = getopt(argc, argv, "Z:A:b:m:e:a:r:i:l:n:N:")) != -1)
+    while ((c = getopt(argc, argv, "Z:A:b:m:e:a:r:i:l:n:N:X:")) != -1)
         switch (c) {
             case 'Z': ps.Z = (uint16_t) atoi( optarg ); break;
             case 'A': ps.A = atof( optarg );            break;
@@ -153,11 +167,19 @@ _configure_aprime_pars_from_command_line( int argc, char * const argv[]
             case 'n': ps.nnodes = atoi( optarg );       break;
             case 'N': {
                 if( !nCalls ) {
-                    std::cerr << "-N is valid for `in' procedure only."
+                    std::cerr << "-N is valid for `int' procedure only."
                               << std::endl;
                     return 1;
                 }
                 *nCalls = atoi( optarg );
+            } break;
+            case 'X' : {
+                if( !maxOutFileNamePtr ) {
+                    std::cerr << "-X is valid for `acs' procedure only."
+                              << std::endl;
+                    return 1;
+                }
+                *maxOutFileNamePtr = optarg;
             } break;
             case '?':
                 fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
@@ -215,14 +237,15 @@ main(int argc, char * const argv[] ) {
             size_t nPointsX, nPointsTheta;
             size_t nCalls = 1e5;
             int cc;
+            char * maxOutFileName = NULL;
             if(acs) {
                 nPointsX = atoi( argv[3] );
                 nPointsTheta = atoi( argv[4] );
                 cc = _configure_aprime_pars_from_command_line(
-                        argc - 4, argv + 4, ps, NULL );
+                        argc - 4, argv + 4, ps, NULL, &maxOutFileName );
             } else {
                 cc = _configure_aprime_pars_from_command_line(
-                        argc - 1, argv + 1, ps, &nCalls );
+                        argc - 1, argv + 1, ps, &nCalls, NULL );
             }
             if( cc ) {
                 std::cerr << "Error: exit due to previous configuration error."
@@ -234,9 +257,17 @@ main(int argc, char * const argv[] ) {
                 if( rc ) return EXIT_FAILURE;
                 return EXIT_SUCCESS;
             } else {
-                FILE * osF = fopen( argv[2], "w" );
-                ::dphmc::test::aprime_dcs_surf( ps, osF, nPointsX, nPointsTheta );
+                FILE * osF = fopen( argv[2], "w" )
+                   , * mxOsF = NULL;
+                if( maxOutFileName ) {
+                    mxOsF = fopen( maxOutFileName, "w" );
+                }
+                ::dphmc::test::aprime_dcs_surf( ps, osF, nPointsX
+                                              , nPointsTheta, mxOsF );
                 fclose( osF );
+                if( mxOsF ) {
+                    fclose( mxOsF );
+                }
             }
             return EXIT_SUCCESS;
         }
