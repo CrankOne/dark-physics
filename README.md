@@ -4,21 +4,28 @@ This repository is dedicated to simulating elementary particle physics from
 so called "dark sector": hypothetical dark matter mediators, axion-like
 particles, light thermal dark matter and so on.
 
+**Current project status is a draft.**
+
 ## Installation Procedure
 
 The library is supposed to be build in the standard out-of-source way:
 
 * clone the repo with
-    $ git clone <repo-addr>
+
+        $ git clone <repo-addr>
 * make the build dir and `cd` to it
-    $ mkdir <build-dir>
-    $ cd -
+
+        $ mkdir <build-dir>
+        $ cd -
 * configure the project with your system defaults
-    $ cmake ../<repo-src>
+
+        $ cmake ../<repo-src>
 * build the lib
-    $ make
+
+        $ make
 * (optional) install the library
-    # make install
+
+        # make install
 
 Note: installation of this library is an option. One can use it right from the
 build directory. However, for better compatibility it is recommended to install
