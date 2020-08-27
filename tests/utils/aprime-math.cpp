@@ -45,7 +45,8 @@ bjorken_chi_ref_curves( const std::string & outputDir ) {
 }
 
 void
-aprime_dcs_surf( const struct dphmc_APrimeWSParameters & ps
+aprime_dcs_surf( const struct dphmc_APrimePhysParameters & ps
+               , struct dphmc_IterativeQAGSParameters & it
                , FILE * os
                , size_t nPointsX, size_t nPointsTheta
                , FILE * mxOs ) {
@@ -54,7 +55,7 @@ aprime_dcs_surf( const struct dphmc_APrimeWSParameters & ps
     fprintf( os, "\n# number of points x, theta: %zu, %zu.\n"
            , nPointsX, nPointsTheta );
     double xRange[2], thetaRange[2];
-    auto points = dphmc::test::aprime_dcs_ww( ps, nPointsX, nPointsTheta
+    auto points = aprime_dcs_ww( ps, it, nPointsX, nPointsTheta
                                             , xRange, thetaRange );
     fprintf( os, "# x range: %e, %e\n", xRange[0], xRange[1] );
     fprintf( os, "# theta range: %e, %e\n", thetaRange[0], thetaRange[1] );
@@ -69,7 +70,7 @@ aprime_dcs_surf( const struct dphmc_APrimeWSParameters & ps
             fprintf( os, "\n" );
     }
     if( mxOs ) {
-        auto pts = aprime_dcs_max( ps, nPointsX );
+        auto pts = aprime_dcs_max( ps, it, nPointsX );
         for( auto pt : pts ) {
             fprintf( mxOs, "%e\t%e\t%e\n", std::get<0>(pt), std::get<1>(pt), std::get<2>(pt) );
         }
@@ -77,7 +78,8 @@ aprime_dcs_surf( const struct dphmc_APrimeWSParameters & ps
 }
 
 int
-aprime_full_cs( const struct dphmc_APrimeWSParameters & ps
+aprime_full_cs( const struct dphmc_APrimePhysParameters & ps
+              , struct dphmc_IterativeQAGSParameters & it
               , size_t nCalls ) {
     fputs( "# ", stdout );
     dphmc_print_aprime_ws_parameters( stdout, &ps );
@@ -92,9 +94,9 @@ aprime_full_cs( const struct dphmc_APrimeWSParameters & ps
         return -1;
     }
     assert(ws);
-    double absErr2, relErr1
+    double relErrPtr, absErrPtr
          , chi2
-         , result1 = dphmc_aprime_ww_full_numeric_1( ws, 1e-12, 1e-12, 1.1, 1e3, 1e3, &relErr1 )
+         , result1 = dphmc_aprime_ww_full_numeric_1( &it, caches_, &relErrPtr, &absErrPtr)
          , result2 = dphmc_aprime_ww_full_numeric_2( ws
                                                    , nCalls
                                                    , &absErr2
@@ -102,9 +104,9 @@ aprime_full_cs( const struct dphmc_APrimeWSParameters & ps
     std::cout << "estimation = " << dphmc_aprime_ww_fast_integral_estimation(ws) << std::endl;
     dphmc_free_aprime_cs_workspace( ws );
     std::cout << "full CS1 = " << result1 << std::endl;
-    std::cout << "CS1 rel err. = " << relErr1 << std::endl;
+    std::cout << "CS1 rel err. = " << relErrPtr << std::endl;
     std::cout << "full CS2 = " << result2 << std::endl;
-    std::cout << "abs. error = " << absErr2 << std::endl;
+    std::cout << "abs. error = " << absErrPtr << std::endl;
     std::cout << "chi2 = " << chi2 << std::endl;
 }
 
@@ -148,7 +150,8 @@ _print_usage( const char * appName, std::ostream & os ) {
 
 static int
 _configure_aprime_pars_from_command_line( int argc, char * const argv[]
-                                        , struct dphmc_APrimeWSParameters & ps
+                                        , struct dphmc_APrimePhysParameters & ps
+                                        , struct dphmc_IterativeQAGSParameters & it
                                         , size_t * nCalls
                                         , char ** maxOutFileNamePtr  ) {
     int c;
@@ -160,11 +163,11 @@ _configure_aprime_pars_from_command_line( int argc, char * const argv[]
             case 'm': ps.massA_GeV = atof( optarg );    break;
             case 'b': ps.EBeam_GeV = atof( optarg );    break;
             case 'e': ps.epsilon = atof( optarg );      break;
-            case 'a': ps.epsabs = atof( optarg );       break;
-            case 'r': ps.epsrel = atof( optarg );       break;
-            case 'i': ps.epsrelIncFt = atof( optarg );  break;
-            case 'l': ps.limit = atoi( optarg );        break;
-            case 'n': ps.nnodes = atoi( optarg );       break;
+            case 'a': it.epsabs = atof( optarg );       break;
+            case 'r': it.epsrel = atof( optarg );       break;
+            case 'i': it.epsrelIncFt = atof( optarg );  break;
+            case 'l': it.limit = atoi( optarg );        break;
+            case 'n': it.nnodes = atoi( optarg );       break;
             case 'N': {
                 if( !nCalls ) {
                     std::cerr << "-N is valid for `int' procedure only."
@@ -213,13 +216,15 @@ main(int argc, char * const argv[] ) {
         bool acs;
         if( (acs = !strcmp( argv[1], "acs" ))
          || !strcmp( argv[1], "int" ) ) {
-            struct dphmc_APrimeWSParameters ps {
+            struct dphmc_APrimePhysParameters ps {
                 /* Z ............... */ (uint16_t) 74,
                 /* A ............... */ 183.84,
                 /* mass A', GeV .... */ 0.05,
                 /* E beam, GeV ..... */ 6,
                 /* mixing factor ... */ 1e-4,
                 /* re-norm factor .. */ 1,
+            };
+            struct dphmc_IterativeQAGSParameters it {
                 /* epsabs .......... */ 1e-12,
                 /* epsrel .......... */ 1e-12,
                 /* epsrelIncFt ..... */ 1.1,
