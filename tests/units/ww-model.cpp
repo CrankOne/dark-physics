@@ -19,9 +19,9 @@ static G4double gEnergyRanges[] = { 123, 12, 5, 74, 0 }
               ;
 
 /// Special "mock" (pseudo) model to test indexing correctnesss
-class MockModel : public APrimeWWApproximation {
+class MockModel : public aprime::APrimeWWApproximation {
 public:
-    MockModel( ) : APrimeWWApproximation( gMinZInMockModel, gEnergyRanges ) {}
+    MockModel( ) : aprime::APrimeWWApproximation( gMinZInMockModel, gEnergyRanges ) {}
 
     /// This mocking generator yields some unrealistic but easy-to-check
     /// values

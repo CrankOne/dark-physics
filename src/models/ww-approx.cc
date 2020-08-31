@@ -63,7 +63,7 @@ APrimeWWApproximation::DefaultGenerator::ShootKinematics(
                                         , G4double * energy
                                         , G4double * theta
                                         , G4double * phi ) const {
-    G4double ul = dphmc_aprime_ww_upper_limit( fCaches );
+    //G4double ul = dphmc_aprime_ww_upper_limit( fCaches );
     // ...
     throw std::runtime_error( "TODO: default generator with direct von Neumann." );
 }

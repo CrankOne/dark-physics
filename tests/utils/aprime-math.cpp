@@ -26,8 +26,9 @@ bjorken_chi_ref_curves( const std::string & outputDir ) {
         { "Pb-82-207-80",   {   80, 207.2,  82 } },
         { "", { -1 } }
     };
-    for( auto p = ps; p->values[0] > 0; ++p ) {
+    for( auto p = ps; !p->label.empty(); ++p ) {
         std::ofstream os = std::ofstream( outputDir + p->label + ".dat" );
+        std::cout << "xxx" << std::endl;  // XXX
         os << "# " << p->label << std::endl;
         double tstVal;
         for( double am = 1e-3; am <= 6. && am <= p->values[0] ; am *= 1.5 ) {
@@ -41,6 +42,7 @@ bjorken_chi_ref_curves( const std::string & outputDir ) {
                 break;
             }
         }
+        os.close();
     }
 }
 
@@ -80,10 +82,15 @@ aprime_dcs_surf( const struct dphmc_APrimePhysParameters & ps
 int
 aprime_full_cs( const struct dphmc_APrimePhysParameters & ps
               , struct dphmc_IterativeQAGSParameters & it
-              , size_t nCalls ) {
+              , size_t nCalls
+              , double (*  elastic_f)( double, struct dphmc_APrimePhysParameters * )
+              , double (*inelastic_f)( double, struct dphmc_APrimePhysParameters * )
+              , int flags
+              ) {
     fputs( "# ", stdout );
     dphmc_print_aprime_ws_parameters( stdout, &ps );
     printf("\n# VEGAS integration; N=%zu\n", nCalls );
+    # if 0
     void * ws = NULL;
     int rc = dphmc_init_aprime_cs_workspace( &ps, &ws );
     if( rc ) {
@@ -93,27 +100,39 @@ aprime_full_cs( const struct dphmc_APrimePhysParameters & ps
         dphmc_free_aprime_cs_workspace( ws );
         return -1;
     }
-    assert(ws);
-    double relErrPtr, absErrPtr
+    #endif
+    aprime::WWCaches * wwCaches = dphmc_aprime_new( &ps
+                             , &it
+                             , elastic_f
+                             , inelastic_f
+                             , flags
+                             );
+
+    assert(wwCaches);
+    double relErrPtr, absErr
          , chi2
-         , result1 = dphmc_aprime_ww_full_numeric_1( &it, caches_, &relErrPtr, &absErrPtr)
-         , result2 = dphmc_aprime_ww_full_numeric_2( ws
+         , result1 = dphmc_aprime_ww_full_numeric_1( &it, wwCaches, &relErrPtr, &absErr)
+         , result2 = dphmc_aprime_ww_full_numeric_2( wwCaches
                                                    , nCalls
-                                                   , &absErr2
+                                                   , &absErr
                                                    , &chi2 );
-    std::cout << "estimation = " << dphmc_aprime_ww_fast_integral_estimation(ws) << std::endl;
-    dphmc_free_aprime_cs_workspace( ws );
+    std::cout << "estimation = "
+              << dphmc_aprime_ww_fast_integral_estimation(wwCaches)
+              << std::endl;
+    //dphmc_free_aprime_cs_workspace( ws );
+    dphmc_aprime_delete( wwCaches );
     std::cout << "full CS1 = " << result1 << std::endl;
     std::cout << "CS1 rel err. = " << relErrPtr << std::endl;
     std::cout << "full CS2 = " << result2 << std::endl;
-    std::cout << "abs. error = " << absErrPtr << std::endl;
+    std::cout << "abs. error = " << absErr << std::endl;
     std::cout << "chi2 = " << chi2 << std::endl;
+    return 0;
 }
 
 }  // namespace ::dphmc::test
 }  // namespace ddphmc
 
-static int
+static void
 _print_usage( const char * appName, std::ostream & os ) {
     os << "This application assists for the numerical tests of the \"dark"
         " physics\" Monte-Carlo package on A' production. Usage:" << std::endl
@@ -134,7 +153,8 @@ _print_usage( const char * appName, std::ostream & os ) {
         " [-l <GK-limit=1000>]"
         " [-n <GK-nnodes=1000>]"
         " [-X <max-output-file.dat>]"
-        " -- writes reference points"
+        " [-f <flag-name>]" << std::endl <<
+        " Application writes reference points"
         " on differential cross-section surface for given parameters of"
         " calculation to the output dir. The -A and -Z set target atomic"
         " numbers, the -b sets beam energy in GeV, -e sets the mixing constant,"
@@ -143,6 +163,11 @@ _print_usage( const char * appName, std::ostream & os ) {
         " related to it. See \"Numerical Integration\" section of `nfo gsl`"
         " for detailed reference. If -X option provided, its argument is"
         " interpreted as output filename for theta_max value (at some x)."
+        " A' WW approximation cross section procedure may be additionally"
+        " steered by flags: \"enable-chi-theta-dep\","
+        " \"disable-theta-cut-off\", \"disable-phys-parameter-checks\"."
+        " Corresponding documentation for flags may be found at the online doc"
+        " for function dphmc_aprime_new()."
        << std::endl;
     os << "    $ " << appName << " int ..."
        << std::endl;
@@ -153,10 +178,12 @@ _configure_aprime_pars_from_command_line( int argc, char * const argv[]
                                         , struct dphmc_APrimePhysParameters & ps
                                         , struct dphmc_IterativeQAGSParameters & it
                                         , size_t * nCalls
-                                        , char ** maxOutFileNamePtr  ) {
+                                        , char ** maxOutFileNamePtr
+                                        , int & flags ) {
     int c;
     opterr = 0;
-    while ((c = getopt(argc, argv, "Z:A:b:m:e:a:r:i:l:n:N:X:")) != -1)
+    flags = 0x0;
+    while ((c = getopt(argc, argv, "Z:A:b:m:e:a:r:i:l:n:N:X:f:")) != -1)
         switch (c) {
             case 'Z': ps.Z = (uint16_t) atoi( optarg ); break;
             case 'A': ps.A = atof( optarg );            break;
@@ -168,6 +195,22 @@ _configure_aprime_pars_from_command_line( int argc, char * const argv[]
             case 'i': it.epsrelIncFt = atof( optarg );  break;
             case 'l': it.limit = atoi( optarg );        break;
             case 'n': it.nnodes = atoi( optarg );       break;
+            // A' WW calc flags -- see doc on dphmc_aprime_new() flag's
+            // argument
+            case 'f': {
+                if( !strcmp( optarg, "enable-chi-theta-dep" ) ) {
+                    flags |= 0x1;
+                } else if( !strcmp( optarg, "disable-theta-cut-off" ) ) {
+                    flags |= 0x2;
+                } else if( !strcmp( optarg, "disable-phys-parameter-checks" ) ) {
+                    flags |= 0x4;
+                } else {
+                    std::cerr << "Unrecognized A' WW calculation flag \""
+                              << optarg
+                              << "\"." << std::endl;
+                    return 1;
+                }
+            } break;
             case 'N': {
                 if( !nCalls ) {
                     std::cerr << "-N is valid for `int' procedure only."
@@ -223,6 +266,7 @@ main(int argc, char * const argv[] ) {
                 /* E beam, GeV ..... */ 6,
                 /* mixing factor ... */ 1e-4,
                 /* re-norm factor .. */ 1,
+                /* theta cut-off c . */ 100  // TODO: check this
             };
             struct dphmc_IterativeQAGSParameters it {
                 /* epsabs .......... */ 1e-12,
@@ -231,6 +275,7 @@ main(int argc, char * const argv[] ) {
                 /* limit ........... */ (size_t) 1e3,
                 /* nnodes .......... */ (size_t) 1e3
             };
+            int flags;
             if( acs && argc < 5 ) {
                 std::cerr << "Error: output file path and # of &theta points"
                     " must be specified as first positional arguments after"
@@ -247,10 +292,20 @@ main(int argc, char * const argv[] ) {
                 nPointsX = atoi( argv[3] );
                 nPointsTheta = atoi( argv[4] );
                 cc = _configure_aprime_pars_from_command_line(
-                        argc - 4, argv + 4, ps, NULL, &maxOutFileName );
+                          argc - 4, argv + 4
+                        , ps
+                        , it
+                        , &nCalls
+                        , &maxOutFileName
+                        , flags );
             } else {
                 cc = _configure_aprime_pars_from_command_line(
-                        argc - 1, argv + 1, ps, &nCalls, NULL );
+                          argc - 1, argv + 1
+                        , ps
+                        , it
+                        , &nCalls
+                        , NULL
+                        , flags );
             }
             if( cc ) {
                 std::cerr << "Error: exit due to previous configuration error."
@@ -258,8 +313,16 @@ main(int argc, char * const argv[] ) {
                 return EXIT_FAILURE;
             }
             if( !acs ) {
-                int rc = ::dphmc::test::aprime_full_cs( ps, nCalls );
+                #if 0
+                throw std::runtime_error( "TODO: full CS with (in)elastic" );
+                #else
+                int rc = ::dphmc::test::aprime_full_cs( ps, it, nCalls
+                                                      , dphmc_aprime_form_factor_elastic
+                                                      , dphmc_aprime_form_factor_inelastic
+                                                      , flags
+                                                      );
                 if( rc ) return EXIT_FAILURE;
+                #endif
                 return EXIT_SUCCESS;
             } else {
                 FILE * osF = fopen( argv[2], "w" )
@@ -267,7 +330,8 @@ main(int argc, char * const argv[] ) {
                 if( maxOutFileName ) {
                     mxOsF = fopen( maxOutFileName, "w" );
                 }
-                ::dphmc::test::aprime_dcs_surf( ps, osF, nPointsX
+                ::dphmc::test::aprime_dcs_surf( ps, it
+                                              , osF, nPointsX
                                               , nPointsTheta, mxOsF );
                 fclose( osF );
                 if( mxOsF ) {

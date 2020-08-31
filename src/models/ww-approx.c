@@ -154,12 +154,14 @@ dphmc_print_aprime_ws_parameters( FILE * f
  * */
 int
 dphmc_aprime_ww_check_phys_parameters_are_valid( const struct dphmc_APrimePhysParameters * ps ) {
+    #if 0
     if( ps->massA_GeV <= 4*me ) {
         return -1;  /* A' mass is too small */
     }
     if( ps->massA_GeV > ps->EBeam_GeV/10 ) {
         return -2;  /* A' mass is of the same order as E0 */
     }
+    #endif
     /* ... TODO: more */
     return 0;
 }
@@ -176,7 +178,7 @@ dphmc_aprime_ww_check_phys_parameters_are_valid( const struct dphmc_APrimePhysPa
  *  0x2 -- Sets the upper \f$\theta_{max}\f$ cut-off angle to \f$\pi\f$. The
  *         \f$\theta_{max}\f$ cut-off angle is expected to be proportional
  *         to \f$ \max(\frac{\sqrt{m_{A'}m_e}}{E_0}, (m_{A'}/E_0)^{3/2}), with
- *         coefficiont \f$~ 1\f$. Enabling this flag turns integration on for
+ *         coefficient \f$~ 1\f$. Enabling this flag turns integration on for
  *         the full \f$[0,\pi]\f$ range of \f$\theta\f$. One may control the
  *         coefficient of proprotionality with `maxThetaFactor` attribute with
  *         this flag being disabled, or set it to \$\pi\$ by enabling this
@@ -218,7 +220,8 @@ dphmc_aprime_new( const struct dphmc_APrimePhysParameters * ps
             caches->xRange[1] = c1 > c2 ? c1 : c2;
             caches->xRange[1] = 1 - caches->xRange[1] /*caches->xRange[1]*/;  // TODO: squared?
             assert( caches->xRange[1] < 1. );
-            assert( caches->xRange[1] > caches->xRange[0] );
+            //assert( caches->xRange[1] >= caches->xRange[0] );
+            #warning "uncomment assertion"
         }
         if( 0x2 & flags ) {
             /* flags forces the theta upper limit to be set strictly to \pi. */
@@ -258,7 +261,7 @@ dphmc_aprime_new( const struct dphmc_APrimePhysParameters * ps
      * usage */
     memcpy( &(caches->chiIntPars)
           , chiIntPars
-          , sizeof(struct dphmc_APrimeWWCaches) );
+          , sizeof(struct dphmc_IterativeQAGSParameters) );
     caches->gslChiIntWS = gsl_integration_workspace_alloc( caches->chiIntPars.nnodes );
     /* Compute the constant chi approximation. Even if \chi dependency of
      * \theta has to be taken into account, there is some approximations that
@@ -494,10 +497,8 @@ dphmc_aprime_form_factor_inelastic( double t
 double
 dphmc_aprime_ww_photon_flux_for( double x
                                , double theta
-                               , void * caches_ ) {
-    assert( caches_ );
-    struct dphmc_APrimeWWCaches * caches
-        = (struct dphmc_APrimeWWCaches *) caches_;
+                               , struct dphmc_APrimeWWCaches * caches ) {
+    assert( caches );
     if( ! (caches->gslChiIntWS) ) {
         /* no ws allocd -- return const approx */
         return caches->constChiCache.chi;
@@ -539,11 +540,9 @@ dphmc_aprime_ww_photon_flux_for( double x
 double
 dphmc_aprime_cross_section_a12( double x
                               , double theta
-                              , void * caches_ ) {
-    assert(caches_);
-    struct dphmc_APrimeWWCaches * caches
-        = (struct dphmc_APrimeWWCaches *) caches_;
-    const double chi = dphmc_aprime_ww_photon_flux_for( x, theta, caches_ );
+                              , struct dphmc_APrimeWWCaches * caches ) {
+    assert(caches);
+    const double chi = dphmc_aprime_ww_photon_flux_for( x, theta, caches );
     const struct dphmc_APrimePhysParameters * ps = &(caches->physPars);
     const double AM = ps->massA_GeV
                , E0 = ps->EBeam_GeV
@@ -632,14 +631,12 @@ dphmc_aprime_ww_approx_sigma_a15( const struct dphmc_APrimeWWCaches * caches_ ) 
 }
 
 double
-dphmc_aprime_ww_fast_integral_estimation( void * caches_ ) {
-    struct dphmc_APrimeWWCaches * caches
-                = (struct dphmc_APrimeWWCaches *)(caches_);
+dphmc_aprime_ww_fast_integral_estimation( struct dphmc_APrimeWWCaches * caches ) {
     if( ! isnan(caches->integralEstVal) ) {
         return caches->integralEstVal;
     }
     /*assert( isnan(caches->integralEstVal, "lazy") );*/
-    return caches->integralEstVal = dphmc_aprime_ww_approx_sigma_a15( caches_ );
+    return caches->integralEstVal = dphmc_aprime_ww_approx_sigma_a15( caches );
 }
 
 static double
@@ -656,13 +653,12 @@ _static_ww_aprime_cs_wrapper( double * x, size_t dim, void * params ) {
  * testing library */
 double
 dphmc_aprime_ww_full_numeric_1( const struct dphmc_IterativeQAGSParameters * qagsp
-                              , void * caches_
+                              , struct dphmc_APrimeWWCaches * caches
                               , double * relErrPtr, double * absErrPtr ) {
-    assert(caches_);
-    struct dphmc_APrimeWWCaches * caches
-        = (struct dphmc_APrimeWWCaches *) caches_;
+    assert(caches);
     return dphmc_QAGS_integrate_iteratively( qagsp
-                                           , dphmc_aprime_cross_section_a14, caches_
+                                           , dphmc_aprime_cross_section_a14
+                                           , caches
                                            , caches->xRange[0], caches->xRange[1]
                                            , relErrPtr, absErrPtr
                                            , NULL );
@@ -676,14 +672,11 @@ dphmc_aprime_ww_full_numeric_1( const struct dphmc_IterativeQAGSParameters * qag
  * required chisq threshold is reached.
  */
 double
-dphmc_aprime_ww_full_numeric_2( void * caches_
+dphmc_aprime_ww_full_numeric_2( struct dphmc_APrimeWWCaches * caches
                               , size_t nCalls
                               , double * absError
                               , double * chi2 ) {
-    assert(caches_);
-    struct dphmc_APrimeWWCaches * caches
-        = (struct dphmc_APrimeWWCaches *) caches_;
-
+    assert(caches);
     if( ! caches->gslVegasSt ) {
         caches->gslVegasSt = gsl_monte_vegas_alloc(2);
         int rc = gsl_monte_vegas_init( caches->gslVegasSt );
@@ -696,7 +689,7 @@ dphmc_aprime_ww_full_numeric_2( void * caches_
     T = gsl_rng_default;
     r = gsl_rng_alloc( T );
     # endif
-    gsl_monte_function F = { _static_ww_aprime_cs_wrapper, 2, caches_ };
+    gsl_monte_function F = { _static_ww_aprime_cs_wrapper, 2, caches };
     double ranges[] = { caches->xRange[0], 0
                       , caches->xRange[1], caches->thetaMax
                       };

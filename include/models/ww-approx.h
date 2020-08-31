@@ -140,13 +140,13 @@ dphmc_aprime_gsl_wrapper_chi_integrand( double t, void * ff_ );
 double
 dphmc_aprime_ww_photon_flux_for( double x
                                , double theta
-                               , void * caches_ );
+                               , struct dphmc_APrimeWWCaches * caches );
 
 
 /** Calculates cross-section according to \cite{JDBjorken} (A12). */
 double dphmc_aprime_cross_section_a12( double x
                                      , double theta
-                                     , void * ws );
+                                     , struct dphmc_APrimeWWCaches * ws );
 
 /** Full implementation of (A14) of \cite Bjorken. */
 double dphmc_aprime_cross_section_a14( double x
@@ -167,18 +167,23 @@ double dphmc_aprime_upper_cut_theta( const void * caches );
 
 /** Returns integral estimation obtained according to (A16) formula
  * \cite{Bjorken}. */
-double dphmc_aprime_ww_fast_integral_estimation( void * ws );
+double dphmc_aprime_ww_fast_integral_estimation( struct dphmc_APrimeWWCaches * ws );
 
 /**Numerical full cross-section estimate w.r.t. WW A' approximation (by
  * x only). */
 double
 dphmc_aprime_ww_full_numeric_1( const struct dphmc_IterativeQAGSParameters * qagsp
-                              , void * caches_
-                              , double * relErrPtr, double * absErrPtr );
+                              , struct dphmc_APrimeWWCaches * caches
+                              , double * relErrPtr
+                              , double * absErrPtr
+                              );
 
 /**Numerical full cross-section estimate w.r.t. WW A' approximation. */
-double dphmc_aprime_ww_full_numeric_2( void * ws, size_t nCalls
-                                     , double * absError, double * chi2 );
+double dphmc_aprime_ww_full_numeric_2( struct dphmc_APrimeWWCaches * caches
+                                     , size_t nCalls
+                                     , double * absError
+                                     , double * chi2
+                                     );
 
 /**Returns estimation of an upper bound of the differential
  * cross-section given by dphmc_aprime_cross_section_a12(). */

@@ -58,8 +58,9 @@ chi_bjorken( double * x, double * p ) {
                                                 , dphmc_aprime_form_factor_elastic
                                                 , dphmc_aprime_form_factor_inelastic
                                                 , 0x0 );
-    if( dphmc_error ) {
-        dphmc_aprime_delete( caches );
+    if( dphmc_error || !caches ) {
+        if(caches)
+            dphmc_aprime_delete( caches );
         throw std::runtime_error( "Failed to initialize CS-workspace for A'." );
     }
     double absErr, relErr;
