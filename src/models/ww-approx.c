@@ -28,79 +28,9 @@
 # define mp     _DPhMC_CONST_protonMass_GeV
 
 
-/** Performs repeating integration using Gauss-Kronrod method from GSL,
- * mitigating relative error requirement at each failed step.
- *
- * Temporary disables native GSL error handler to prevent abortion of the
- * execution and re-iterate the QAGS procedure with relative error mitigated
- * by factor `epsrelIncFt`.
- *
- * @param qagsp A fully-initialized instance of dphmc_IterativeQAGSParameters
- * @param f Integrand function
- * @param ps Parameters set for integrand function
- * @param xLow lower limit for integration
- * @param xUp upper limit of integration
- * @param relError pointer to `double` variable where the relative error is to
- * be written
- * @param qagspWS pointer to allocated `gsl_integration_workspace`, valid for
- * amount of nodes specified in `qagsp` structure. May be NULL.
- * @returns integrap estimation with relative error written by `relErrPtr`
- * */
-double
-dphmc_QAGS_integrate_iteratively( const struct dphmc_IterativeQAGSParameters * qagsp
-                                , double (*f)(double, void*), const void * ps
-                                , double xLow, double xUp
-                                , double * relErrPtr, double * absErrPtr
-                                , void * qagspWS_
-                                ) {
-    double res = NAN;
-    int rr;
-    gsl_integration_workspace * intWS = ( qagspWS_ ? qagspWS_
-                                        : gsl_integration_workspace_alloc( qagsp->nnodes ) );
-    gsl_function F = {
-            .function = f,
-            .params = (void *) ps
-        };
-
-    gsl_error_handler_t * old_handler = gsl_set_error_handler_off();
-
-    for( *relErrPtr = qagsp->epsrel;
-         *relErrPtr < 1.;
-         *relErrPtr *= qagsp->epsrelIncFt ) {
-        if( GSL_EROUND == (rr = gsl_integration_qags( &F
-                                                    , xLow, xUp
-                                                    , qagsp->epsabs, *relErrPtr
-                                                    , qagsp->limit, intWS
-                                                    , &res, absErrPtr)) ) {
-            DPhMC_msg( "Integration: at gsl_integration_qags(...) needs to be"
-                    " more tolerant [%e, %e]; changing epsrel %e -> %e."
-                    , xLow, xUp, *relErrPtr, (*relErrPtr) * qagsp->epsrelIncFt );
-            continue;
-        } else if( !rr ) {
-            break;  /* integrated correctly */
-        } else {
-            DPhMC_msge( "Lower integration limit: %e", xLow );
-            DPhMC_msge( "Upper integration limit: %e", xUp );
-            DPhMC_msge( "Current relative error: %e", *relErrPtr );
-            DPhMC_error( DPHMC_THIRD_PARTY_ERROR
-                       , "Got a gsl_integration_qags(...) error %d: \"%s\""
-                       , rr
-                       , (gsl_strerror(rr) ? gsl_strerror(rr) : "<unknown>" )
-                       );
-        }
-    }
-    gsl_set_error_handler(old_handler);
-    if( !isfinite(res) ) {
-        DPhMC_error( DPHMC_INTEGRATION_ERROR
-                   , "dphmc_aprime_chi() integration evaluated to infinite"
-                   " value: %e."
-                   , res );
-    }
-    if( ! qagspWS_) {
-        gsl_integration_workspace_free( intWS );
-    }
-    return res;
-}
+/*                  _________________________________
+ * _______________/ Caches declaration and lyfecycle \_________________________
+ */
 
 struct dphmc_ChiCache {
     double chi  /* constant approximation of \chi */
@@ -117,8 +47,12 @@ struct dphmc_APrimeWWCaches {
     /* Physical parameters used for this caches */
     struct dphmc_APrimePhysParameters physPars;
 
-    /* These values are derived from `physPars` and remains constant */
-    double xRange[2]  /*< x-range, for integration */
+    /* These values are derived from `physPars` and must remain constant for
+     * certain physical parameters set */
+    double ma2  /* squared A' mass */
+         , mema2  /* \f$ (m_e/m_{A'})^2 \f$ */
+         , E02ma2  /* \f$ (E_0/m_{A'})^2 \f$ */
+         , xRange[2]  /*< x-range, for integration */
          , thetaMax  /*< maximum theta value, for integration */
          , integralEstVal  /*< according to (A16) */
          , cstFact  /*< constant term of the (A12): 8*\alpha^3*\eps^2\geta_{A'} */
@@ -154,6 +88,7 @@ dphmc_print_aprime_ws_parameters( FILE * f
  * */
 int
 dphmc_aprime_ww_check_phys_parameters_are_valid( const struct dphmc_APrimePhysParameters * ps ) {
+    assert(ps->massA_GeV > me);
     #if 0
     if( ps->massA_GeV <= 4*me ) {
         return -1;  /* A' mass is too small */
@@ -210,18 +145,26 @@ dphmc_aprime_new( const struct dphmc_APrimePhysParameters * ps
     }
     /* Compute some values derived directly from phys. pars */
     {
+        caches->ma2 = caches->physPars.massA_GeV * caches->physPars.massA_GeV;
+        caches->mema2 = (me/caches->physPars.massA_GeV)*(me/caches->physPars.massA_GeV);
+        assert( caches->mema2 >= 1. );
+        caches->E02ma2 = (caches->physPars.EBeam_GeV / caches->physPars.massA_GeV)
+                       * (caches->physPars.EBeam_GeV / caches->physPars.massA_GeV);
         /* lower x bound is determined from common sense -- mass threshold */
         caches->xRange[0] = caches->physPars.massA_GeV / caches->physPars.EBeam_GeV;
         /* upper x bound is defined by divergence of the cross section, -- see
          * condition (A16) in \cite Bjorken */
         {
+            #if 0
+            caches->xRange[1] = 1;
+            #else
             double c1 = me/ps->massA_GeV
                  , c2 = caches->xRange[0];
             caches->xRange[1] = c1 > c2 ? c1 : c2;
             caches->xRange[1] = 1 - caches->xRange[1] /*caches->xRange[1]*/;  // TODO: squared?
             assert( caches->xRange[1] < 1. );
-            //assert( caches->xRange[1] >= caches->xRange[0] );
-            #warning "uncomment assertion"
+            assert( caches->xRange[1] >= caches->xRange[0] );
+            #endif
         }
         if( 0x2 & flags ) {
             /* flags forces the theta upper limit to be set strictly to \pi. */
@@ -301,109 +244,6 @@ dphmc_aprime_new( const struct dphmc_APrimePhysParameters * ps
     /* Initialize GSL VEGAS integration workspace for full \sigma with NULL */
     caches->gslVegasSt = NULL;
     return caches;
-    # if 0
-    struct Workspace ** wsPtr = (struct Workspace **) wsPtr_
-                   ,  * ws = NULL;
-    struct dphmc_APrimeWSParameters * ps = NULL;
-    /* Flags steering (re-)initialization of the procedure */
-    const int doRecalculation             = 0x1  /* re-calc chi */
-            , doGSLWorkspaceAllocation    = 0x2 | 0x1  /* re-allocate chi-int ws */
-            , doParametersReassignment    = 0x4 | 0x1  /* re-assign user params */
-            ;
-    int routineFlags = 0x0;
-
-    if( *wsPtr ) {  /* workspace is already allocated */
-        if( memcmp( &((*wsPtr)->parameterSet)
-                  , newPs
-                  , sizeof(struct dphmc_APrimeWSParameters)
-                  ) ) {  /* parameter set has changed */
-            if( (*wsPtr)->parameterSet.nnodes ) {
-                /* GSL nodes changed -- need to re-allocate GSL workspace) */
-                gsl_integration_workspace_free( (*wsPtr)->gslIntWS );
-                (*wsPtr)->gslIntWS = NULL;
-                routineFlags |= doGSLWorkspaceAllocation;
-            }
-            routineFlags |= doRecalculation;
-            routineFlags |= doParametersReassignment;
-        }
-    } else {
-        /* parameters were not allocated */
-        *wsPtr = _static_allocate_workspace();
-        routineFlags |= doRecalculation;
-        routineFlags |= doParametersReassignment;
-    }
-
-    ws = *wsPtr;
-    ps = &(ws->parameterSet);
-
-    if( routineFlags & doParametersReassignment ) {
-        memcpy( ps
-              , newPs
-              , sizeof(struct dphmc_APrimeWSParameters)
-              );
-    }
-
-    if( routineFlags & doGSLWorkspaceAllocation ) {
-        ws->gslIntWS = gsl_integration_workspace_alloc( ps->nnodes );
-    }
-
-    if( routineFlags & doRecalculation ) {
-        /*DPhMC_msg( "Recalculation of chi form-factor invoked for E0=%e.", ps->EBeam_GeV );*/
-        ws->tRange[0] = pow(ps->massA_GeV, 4)/(4*(ps->EBeam_GeV)*(ps->EBeam_GeV));
-        /* TODO: ^^^ pow(U/(2*E0*(1-x)), 2); for excellent approximation */
-        ws->tRange[1] = ps->massA_GeV*ps->massA_GeV;
-        ws->chi = dphmc_aprime_chi( &(ws->chiAbsError), &(ws->chiRelError), ws );
-        if(!(isfinite(ws->chi) &&
-             isfinite(ws->tRange[0]) &&
-             isfinite(ws->tRange[1])) ) {
-            DPhMC_error( DPHMC_BAD_VALUE
-                       , "Bad value of t_min=%e/t_max=%e/chi=%e."
-                       , ws->tRange[0], ws->tRange[1], ws->chi );
-        }
-        /* Set the theta integration limits.
-         * theta_up -- according to formula (9) of \cite{Bjorken} */
-        if( ps->flags & 0x2 ) {
-            ws->thetaMax = M_PI;
-        } else {
-            double val1 = sqrt( ps->massA_GeV*_DPhMC_CONST_electronMass_GeV )/ps->EBeam_GeV
-                 , val2 = pow( ps->massA_GeV/ps->EBeam_GeV, 1.5 );
-            ws->thetaMax = ps->maxThetaFactor * (val1 > val2 ? val1 : val2);
-            if( ws->thetaMax > M_PI ) {
-                ws->thetaMax = M_PI;
-            }
-        }
-        /* Set the x integration limits.
-         *  x_low -- mass threshold
-         *  x_up -- given by singularity conditions */
-        ws->xRange[0] = ps->massA_GeV / ps->EBeam_GeV;
-        {   /* from condition (A16) */
-            double c1 = me/ps->massA_GeV,
-                   c2 = ws->xRange[0];
-            ws->xRange[1] = c1 > c2 ? c1 : c2;
-            ws->xRange[1] = 1 - ws->xRange[1]*ws->xRange[1];
-        }
-        if( ws->xRange[0] > 1 || ws->xRange[0] < 0. ) {
-            DPhMC_msgw( "x_min > 1 || x_min < 0 for the A' integration workspace %p"
-                         "(E_0 = %e GeV, m_A'= %e GeV, x_{min} = %e)!",
-                         ws, ps->EBeam_GeV, ps->massA_GeV, ws->xRange[0] );
-        }
-        if( ws->xRange[1] > 1 || ws->xRange[1] < 0. ) {
-            DPhMC_msgw( "x_max > 1 || x_max < 0 for the A' integration workspace %p"
-                         "(E_0 = %e GeV, m_A'= %e GeV, x_{max} = %e)!",
-                         ws, ps->EBeam_GeV, ps->massA_GeV, ws->xRange[1] );
-        }
-        if( ! (ws->xRange[0] < ws->xRange[1]) ) {
-            DPhMC_msge(
-                         "x_min >= x_max for the A' integration workspace %p"
-                         " (E_0 = %e GeV, m_A'= %e GeV, x_{min} = %e, x_{max} = %e)!"
-                       , ws, ps->EBeam_GeV, ps->massA_GeV, ws->xRange[0], ws->xRange[1] );
-        }
-        ws->integralEstVal = _static_calc_analytic_integral_estimation( ws );
-    }
-    assert( ps->A > 0 );
-    assert( ps->Z > 0 );
-    return 0;
-    # endif
 }
 
 void
@@ -419,6 +259,10 @@ dphmc_aprime_delete( struct dphmc_APrimeWWCaches * caches ) {
     }
     free(caches);
 }
+
+/*                        _______________________
+ * _____________________/ Cross-section calculus \_____________________________
+ */
 
 /** For given nuclei parameters, calculates integrand function as a sum
  * of elastic and, optionally, inelastic components (when `inelastic` callback
@@ -517,6 +361,35 @@ dphmc_aprime_ww_photon_flux_for( double x
                                 , caches->gslChiIntWS );
 }
 
+/**This function calculates the factor of (A12) formula \cite{JDBjorken} that
+ * actually defined cross-section variance with respect to varying
+ * \f$theta\f,x$ arguments.
+ *
+ * \f[
+ * f(x, \theta) = \frac{1}{U^2} ( 1 - (1-x) x ( 1/2 + \frac{m_{A'}{U^2}(\frac{1-x}{x} m_{A'}^2 - U) )} ) )
+ * \f]
+ * 
+ * where
+ *
+ * \f[
+ * U(x, \theta) = E_0^2 \theta^2 .
+ * \f]
+ *
+ * This expression alone is useful for building sampling algorithms. */
+double
+dphmc_aprime_cross_section_variable_factor( double x
+                                          , double theta
+                                          , struct dphmc_APrimeWWCaches * caches ) {
+    const struct dphmc_APrimePhysParameters * ps = &(caches->physPars);
+    const double E0 = ps->EBeam_GeV
+               , am2 = caches->ma2
+               , U = pow(E0*theta, 2)*x + am2*(1 - x)/x + me*me*x
+               , U2 = U*U
+               , xm1 = 1 - x
+               ;
+    return ( 1 - xm1*x*( .5 + am2*(xm1*am2/x - U)/U2 ) )*x/U2;
+}
+
 /**Calculates sigma according to (A12) formula \cite{JDBjorken}, returning
  * result of numerical calculation of the following value:
  * \f[
@@ -555,7 +428,14 @@ dphmc_aprime_cross_section_a12( double x
                , factor4 = 2 * caches->cstFact * chi * (E0 * E0) * x * sin(theta)
                , res = factor4 * (factor1 + factor2*factor3)
                ;
+    #if 0
+    assert(isfinite(factor1));
+    assert(isfinite(factor2));
+    assert(isfinite(factor3));
+    assert(isfinite(factor4));
+    #else
     assert(isfinite(res));
+    #endif
     return res;
 }
 
@@ -942,16 +822,94 @@ dphmc_aprime_ww_integrated_a14( double x, const void * caches_ ) {
     return caches->cstFact*fact/(2*me2*me2*me2);  // TODO check that cstFact really contains everything (no)
 }
 
-# if 0
+/*                                  _________
+ * _______________________________/ Sampling \_________________________________
+ */
+
+/** This optimistic estimation for a random \f$x\f$ is derived by integrating
+ * the majorant function:
+ *
+ * \f[
+ * M_{x,2} (x) = (m_e^2 x + m_{A'}^2 (1-x) )^(-1),
+ * \f]
+ *
+ * which yields the following reverse function for x:
+ *
+ * \f[
+ * x = \frac{1}{2 E_0} \frac{1-(m_e/m_{A'})^{2 u}}{1-(m_e/m_{A'})^{2}}
+ * \f]
+ *
+ * Used to derive X in two-step modified von Neumann method on A' with WW.
+ * */
 double
-dphmc_aprime_ww_fast_integral_estimation( void * ws ) {
+dphmc_aprime_ww_mj2_rev_x( double u
+                         , const struct dphmc_APrimeWWCaches * caches ) {
+    return ( (1. - pow(caches->mema2, u))
+           / (1 - caches->mema2)
+           )
+         / (2*caches->physPars.EBeam_GeV);
 }
 
-/**Used mainly by accept-reject (direct von Neumann) sampling method */
+
+/** Returns value of the "first" x-majorant (2D majorant integrated over theta):
+ *
+ * \f[
+ * M_{x,1} = \frac{\pi^2 x}{2 m_{A'}^2} /
+ *      (( \frac{m_e^2}{m_{A'}}^2 + \frac{1-x}{x^2} )
+ *       ( (\frac{m_e^2}{m_{A'}}^2 + \frac{E_0^2}{m_{A'}^2} \pi^2) + \frac{1-x}{x^2} ))
+ * \f]
+ *
+ * */
 double
-dphmc_aprime_ww_upper_limit( void * caches ) {
-    //# warning "Here be dragons"  // TODO
-    return 0.;
+dphmc_aprime_ww_mj1_x( double x
+                     , const struct dphmc_APrimeWWCaches * caches ) {
+    const double ma = caches->physPars.massA_GeV
+               , ma2 = caches->ma2
+               , mema2 = caches->mema2
+               , mxx2 = (1-x)/(x*x)
+               , pi2 = M_PI*M_PI
+               , factor1 = pi2*x/(2*ma2)
+               , factor2 = (mema2 + mxx2)
+               , factor3 = (mema2 + caches->E02ma2 *pi2 + mxx2)
+               ;
+    return factor1/(factor2*factor3);
 }
-# endif
+
+/** Uses \f$M_{x,2}(u)\f$ (defined by `dphmc_aprime_ww_mj2_rev_x()`)
+ * to sample \f$\tilde{x}\f$ ("optimistic" \f$x\f$) according to \f$M_{x,1}(u)\f$
+ * (defined by `dphmc_aprime_ww_mj1_x()`).
+ *
+ * Returned \f$\tilde{x}\f$ has to be used further as a prameter to first-order
+ * majorant \f$M_{x,theta,1}(x, \theta)\f$ to sample A' kinematics.
+ *
+ * \warning Since \f$M_{x,1}(u)\f$ and \f$M_{x,2}(u)\f$ are considered to be
+ * very close, no limit on iteration is done at this routine. */
+double
+dphmc_aprime_ww_mj1_sample_x( struct dphmc_URandomState * uRandom
+                            , const struct dphmc_APrimeWWCaches * caches ) {
+    double x, conjX;
+    do {
+        /* Generate a pair */
+        x = dphmc_aprime_ww_mj2_rev_x( dphmc_urandom_generate(uRandom), caches );
+        conjX = dphmc_urandom_generate(uRandom);
+    } while( conjX < dphmc_aprime_ww_sample_x_mj1(x, caches) );
+    return x;
+}
+
+/** The following formula is derived from \f$M_{x, \theta, 1}(x, \theta)\f$
+ * after integrating it over \f$\theta\f$ and normalizing in
+ * \f$0 <= \theta <= \pi\f$:
+ *
+ * \f[
+ * \tilde{\theta}(u) = \pi \sqrt{\frac{u (1-x) + (m_e/m_{A'})^2 x^2}{ (1-x) + (m_e/m_{A'})^2 + x^2 (E_0/m_{A'})^2 \pi^2 (1-u)) }}
+ * \f]
+ *
+ * */
+double
+dphmc_aprime_ww_mj1_rev_theta( double u
+                             , const struct dphmc_APrimeWWCaches * ws ) {
+    //const double factor1 = 
+    //return M_PI*sqrt( factor1/factor2 );
+}
+
 

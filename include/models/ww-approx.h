@@ -15,9 +15,14 @@
 
 # include "dphmc-config.h"
 # include "dphmc-inspection.h"
+# include "dphmc-integrw.h"
 
 # include <stdlib.h>
 # include <stdint.h>
+
+# ifdef __cplusplus
+extern "C" {
+# endif
 
 /*
  * Constants
@@ -40,34 +45,8 @@
  * */
 # define _DPhMC_CONST_pbarn_per_GeV           3.894e+8
 
-# ifdef __cplusplus
-extern "C" {
-# endif
-
-/**@brief A parameters set structure for integrating with GSL Gauss-Kronrod algo.
- * @details This integration algorith is common for integrating 1D functions
- * in library. Iterative procedure over the GSL function is applied to gain
- * numerical estimation, gradually loosing the requirement on the relative
- * error. */
-struct dphmc_IterativeQAGSParameters {
-    double epsabs  /**< absolute error */
-         , epsrel  /**< relative error */
-         , epsrelIncFt  /**< relative error increment factor */
-         ;
-    size_t limit  /**< maximum number of subintervals (see GSL QAGS) */
-         , nnodes  /**< GSL integration workspace nodes num */
-         ;
-};
-
-/**An iterative wrapper around the GSL QAGS integration algorithm.*/
-double
-dphmc_QAGS_integrate_iteratively( const struct dphmc_IterativeQAGSParameters * qagsp
-                                , double (*f)(double, void*), const void * ps
-                                , double xLow, double xUp
-                                , double * relErrPtr, double * absErrPtr
-                                , void * qagspWS );
-
 /**@brief Common numerical Cross-Section calculus parameterization.
+ *
  * @details Represents a set of common parameters for calculating cross-section
  * (full and differential) values of Weisacker-Williams approximation of
  * A' production.
@@ -90,11 +69,11 @@ dphmc_print_aprime_ws_parameters( FILE *
                                 , const struct dphmc_APrimePhysParameters * );
 
 /** Checks the input physics parameters for validity to WW approximation
- * approach. */
+ *  approach. */
 int
 dphmc_aprime_ww_check_phys_parameters_are_valid( const struct dphmc_APrimePhysParameters * );
 
-/**@brief Common internal caches of all the procedures */
+/**@brief Common internal caches of all the procedures; fwd only */
 struct dphmc_APrimeWWCaches;
 
 /** Initializes supplementary parameter set for cross-section calculation. */
@@ -120,6 +99,7 @@ struct dphmc_APrimeFormFactor {
     double (*inelastic_f)( double, struct dphmc_APrimePhysParameters * ps );
 };
 
+
 /**Calculates elastic part of electric component of the form factor given
  * by (A18) \cite Bjorken. */
 double
@@ -142,8 +122,12 @@ dphmc_aprime_ww_photon_flux_for( double x
                                , double theta
                                , struct dphmc_APrimeWWCaches * caches );
 
+/**@brief Calculates \f$theta\f,x$-variable part of A' cross section (A12) */
+double dphmc_aprime_cross_section_variable_factor( double x
+                                                 , double theta
+                                                 , struct dphmc_APrimeWWCaches * ws );
 
-/** Calculates cross-section according to \cite{JDBjorken} (A12). */
+/** Calculates cross-section according to (A12). */
 double dphmc_aprime_cross_section_a12( double x
                                      , double theta
                                      , struct dphmc_APrimeWWCaches * ws );
@@ -218,6 +202,36 @@ double dphmc_aprime_ww_theta_max_semianalytic( double x
 
 /** ... */
 double dphmc_aprime_ww_integrated_a14( double x, const void * caches_ );
+
+
+/*                                  _________
+ * _______________________________/ Sampling \_________________________________
+ */
+
+struct dphmc_URandomState;  // TODO
+
+/**\brief Returns optimistic (according to x-majorant #2) value of \f$\tilde{x}\f$
+ * for a random \f$u\f$ */
+double
+dphmc_aprime_ww_mj2_rev_x( double u
+                         , const struct dphmc_APrimeWWCaches * ws );
+
+/**\brief Returns value of x-majorant #1 for given \f$x\f$. */
+double
+dphmc_aprime_ww_mj1_x( double x
+                     , const struct dphmc_APrimeWWCaches * caches );
+
+/**\brief Generates a sample of \f$x\f$ according to x-majorant #1*/
+double
+dphmc_aprime_ww_mj1_sample_x( struct dphmc_URandomState * uRandom
+                            , const struct dphmc_APrimeWWCaches * caches );
+
+
+/**\brief Returns optimistic (according to 2D majorant #1) value of
+ * \f$\tilde{\theta}\f$ for a random \f$u\f$ */
+double
+dphmc_aprime_ww_mj1_rev_theta( double u
+                             , const struct dphmc_APrimeWWCaches * ws );
 
 # ifdef __cplusplus
 }

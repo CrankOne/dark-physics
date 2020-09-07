@@ -21,7 +21,7 @@ ExpValues::value() const {
 
 bool
 ExpValues::good() const {
-    return _current <= _up + _step*1e-1;
+    return _current <= _up + _step*1e-9;
 }
 
 double
