@@ -21,6 +21,7 @@
 # include <gsl/gsl_roots.h>
 
 # include "models/ww-approx.h"
+# include "dphmc-rnd.h"
 
 # define me     _DPhMC_CONST_electronMass_GeV
 # define alpha  _DPhMC_CONST_fineStructureConstant
@@ -33,10 +34,10 @@
  */
 
 struct dphmc_ChiCache {
-    double chi  /* constant approximation of \chi */
-         , tRange[2]  /*< virtuality range to integrate over, for \chi */
-         , chiRelError  /*< relative error of \chi */
-         , chiAbsError  /*< absolute error of \chi XXX? */
+    double chi  /* constant approximation of \f$\chi\f$ */
+         , tRange[2]  /*< virtuality range to integrate over, for \f$\chi\f$ */
+         , chiRelError  /*< relative error of \f$\chi\f$ */
+         , chiAbsError  /*< absolute error of \f$\chi\f$ XXX? */
          ;
     struct dphmc_APrimeFormFactor ff;
 };
@@ -52,6 +53,7 @@ struct dphmc_APrimeWWCaches {
     double ma2  /* squared A' mass */
          , mema2  /* \f$ (m_e/m_{A'})^2 \f$ */
          , E02ma2  /* \f$ (E_0/m_{A'})^2 \f$ */
+         , mj2Scaling /* Integral value of \f$M_{2,x}\f$ */
          , xRange[2]  /*< x-range, for integration */
          , thetaMax  /*< maximum theta value, for integration */
          , integralEstVal  /*< according to (A16) */
@@ -88,15 +90,12 @@ dphmc_print_aprime_ws_parameters( FILE * f
  * */
 int
 dphmc_aprime_ww_check_phys_parameters_are_valid( const struct dphmc_APrimePhysParameters * ps ) {
-    assert(ps->massA_GeV > me);
-    #if 0
     if( ps->massA_GeV <= 4*me ) {
         return -1;  /* A' mass is too small */
     }
     if( ps->massA_GeV > ps->EBeam_GeV/10 ) {
         return -2;  /* A' mass is of the same order as E0 */
     }
-    #endif
     /* ... TODO: more */
     return 0;
 }
@@ -147,9 +146,11 @@ dphmc_aprime_new( const struct dphmc_APrimePhysParameters * ps
     {
         caches->ma2 = caches->physPars.massA_GeV * caches->physPars.massA_GeV;
         caches->mema2 = (me/caches->physPars.massA_GeV)*(me/caches->physPars.massA_GeV);
-        assert( caches->mema2 >= 1. );
+        assert( caches->mema2 <= 1. );
         caches->E02ma2 = (caches->physPars.EBeam_GeV / caches->physPars.massA_GeV)
                        * (caches->physPars.EBeam_GeV / caches->physPars.massA_GeV);
+        caches->mj2Scaling = log(1/caches->mema2)
+                           / (2*caches->E02ma2*(1 - caches->mema2) * caches->ma2 * caches->ma2);
         /* lower x bound is determined from common sense -- mass threshold */
         caches->xRange[0] = caches->physPars.massA_GeV / caches->physPars.EBeam_GeV;
         /* upper x bound is defined by divergence of the cross section, -- see
@@ -361,7 +362,7 @@ dphmc_aprime_ww_photon_flux_for( double x
                                 , caches->gslChiIntWS );
 }
 
-/**This function calculates the factor of (A12) formula \cite{JDBjorken} that
+/**This function calculates the factor of (A12) formula \cite JDBjorken that
  * actually defined cross-section variance with respect to varying
  * \f$theta\f,x$ arguments.
  *
@@ -390,7 +391,7 @@ dphmc_aprime_cross_section_variable_factor( double x
     return ( 1 - xm1*x*( .5 + am2*(xm1*am2/x - U)/U2 ) )*x/U2;
 }
 
-/**Calculates sigma according to (A12) formula \cite{JDBjorken}, returning
+/**Calculates sigma according to (A12) formula \cite JDBjorken, returning
  * result of numerical calculation of the following value:
  * \f[
  * \frac{ d \sigma_{ 2 \rightarrow 3 } }{ d x d \cos{\theta_{A'}} } = \sin(x)
@@ -841,13 +842,14 @@ dphmc_aprime_ww_integrated_a14( double x, const void * caches_ ) {
  *
  * Used to derive X in two-step modified von Neumann method on A' with WW.
  * */
-double
+int
 dphmc_aprime_ww_mj2_rev_x( double u
-                         , const struct dphmc_APrimeWWCaches * caches ) {
-    return ( (1. - pow(caches->mema2, u))
-           / (1 - caches->mema2)
-           )
-         / (2*caches->physPars.EBeam_GeV);
+                         , const struct dphmc_APrimeWWCaches * caches
+                         , double * xPtr ) {
+    *xPtr = ( (1. - pow(caches->mema2, u))
+            / (1. - caches->mema2)
+            );
+    return 0;
 }
 
 
@@ -860,19 +862,20 @@ dphmc_aprime_ww_mj2_rev_x( double u
  * \f]
  *
  * */
-double
+int
 dphmc_aprime_ww_mj1_x( double x
-                     , const struct dphmc_APrimeWWCaches * caches ) {
-    const double ma = caches->physPars.massA_GeV
-               , ma2 = caches->ma2
+                     , const struct dphmc_APrimeWWCaches * caches
+                     , double * vPtr ) {
+    const double ma2 = caches->ma2
                , mema2 = caches->mema2
                , mxx2 = (1-x)/(x*x)
                , pi2 = M_PI*M_PI
                , factor1 = pi2*x/(2*ma2)
                , factor2 = (mema2 + mxx2)
-               , factor3 = (mema2 + caches->E02ma2 *pi2 + mxx2)
+               , factor3 = (mema2 + caches->E02ma2 * pi2 + mxx2)
                ;
-    return factor1/(factor2*factor3);
+    *vPtr = factor1/(factor2*factor3);
+    return 0;
 }
 
 /** Uses \f$M_{x,2}(u)\f$ (defined by `dphmc_aprime_ww_mj2_rev_x()`)
@@ -884,18 +887,26 @@ dphmc_aprime_ww_mj1_x( double x
  *
  * \warning Since \f$M_{x,1}(u)\f$ and \f$M_{x,2}(u)\f$ are considered to be
  * very close, no limit on iteration is done at this routine. */
-double
-dphmc_aprime_ww_mj1_sample_x( struct dphmc_URandomState * uRandom
-                            , const struct dphmc_APrimeWWCaches * caches ) {
-    double x, conjX;
+int
+dphmc_aprime_ww_mj1_sample_x( struct dphmc_URandomState * r
+                            , const struct dphmc_APrimeWWCaches * caches
+                            , double * xPtr ) {
+    double x, conjX, tVal;
+    int rc;
     do {
-        /* Generate a pair */
-        x = dphmc_aprime_ww_mj2_rev_x( dphmc_urandom_generate(uRandom), caches );
-        conjX = dphmc_urandom_generate(uRandom);
-    } while( conjX < dphmc_aprime_ww_sample_x_mj1(x, caches) );
-    return x;
+        /* Generate a pair of random numbers */
+        DPHMC_RIF( r->urandom_f(r->statePtr, &x) );
+        DPHMC_RIF( r->urandom_f(r->statePtr, &conjX) );
+        /* Map one from pair to x */
+        DPHMC_RIF( dphmc_aprime_ww_mj2_rev_x( x, caches, &x ) );
+        /* continue until second value is above the target distribution */
+        DPHMC_RIF( dphmc_aprime_ww_mj1_x(x, caches, &tVal) );
+    } while( conjX > tVal / caches->mj2Scaling );
+    *xPtr = x;
+    return 0;
 }
 
+#if 0
 /** The following formula is derived from \f$M_{x, \theta, 1}(x, \theta)\f$
  * after integrating it over \f$\theta\f$ and normalizing in
  * \f$0 <= \theta <= \pi\f$:
@@ -911,5 +922,6 @@ dphmc_aprime_ww_mj1_rev_theta( double u
     //const double factor1 = 
     //return M_PI*sqrt( factor1/factor2 );
 }
+#endif
 
 

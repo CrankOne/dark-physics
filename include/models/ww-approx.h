@@ -122,7 +122,7 @@ dphmc_aprime_ww_photon_flux_for( double x
                                , double theta
                                , struct dphmc_APrimeWWCaches * caches );
 
-/**@brief Calculates \f$theta\f,x$-variable part of A' cross section (A12) */
+/**@brief Calculates \f$theta\f,x\f$-variable part of A' cross section (A12) */
 double dphmc_aprime_cross_section_variable_factor( double x
                                                  , double theta
                                                  , struct dphmc_APrimeWWCaches * ws );
@@ -212,26 +212,30 @@ struct dphmc_URandomState;  // TODO
 
 /**\brief Returns optimistic (according to x-majorant #2) value of \f$\tilde{x}\f$
  * for a random \f$u\f$ */
-double
+int
 dphmc_aprime_ww_mj2_rev_x( double u
-                         , const struct dphmc_APrimeWWCaches * ws );
+                         , const struct dphmc_APrimeWWCaches * ws
+                         , double * xPtr );
 
 /**\brief Returns value of x-majorant #1 for given \f$x\f$. */
-double
+int
 dphmc_aprime_ww_mj1_x( double x
-                     , const struct dphmc_APrimeWWCaches * caches );
+                     , const struct dphmc_APrimeWWCaches * caches
+                     , double * vPtr );
 
 /**\brief Generates a sample of \f$x\f$ according to x-majorant #1*/
-double
+int
 dphmc_aprime_ww_mj1_sample_x( struct dphmc_URandomState * uRandom
-                            , const struct dphmc_APrimeWWCaches * caches );
+                            , const struct dphmc_APrimeWWCaches * caches
+                            , double * xPtr );
 
-
+#if 0
 /**\brief Returns optimistic (according to 2D majorant #1) value of
  * \f$\tilde{\theta}\f$ for a random \f$u\f$ */
 double
 dphmc_aprime_ww_mj1_rev_theta( double u
                              , const struct dphmc_APrimeWWCaches * ws );
+#endif
 
 # ifdef __cplusplus
 }

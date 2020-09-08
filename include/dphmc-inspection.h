@@ -38,7 +38,6 @@ extern int dphmc_error;
  * critical ones which have to be put in stderr. */
 # ifdef NDEBUG
 #   define DPhMC_msg( ... )  /* disabled */
-
 # else
 #   define DPhMC_msg( fmt, ... )  \
     fprintf( dphmc_stdout ? dphmc_stdout : stdout, fmt "\n", ## __VA_ARGS__ );
@@ -69,5 +68,7 @@ extern int dphmc_error;
 # define DPHMC_DECLARE_CODE( name, code, description ) extern const int name;
 DPHMC_FOR_EACH_ERROR_CODE( DPHMC_DECLARE_CODE )
 # undef DPHMC_DECLARE_CODE
+
+# define DPHMC_RIF( expr ) if( 0 != (rc = expr) ) { return rc; }
 
 # endif  /* H_DPHMC_INSPECTION_H */

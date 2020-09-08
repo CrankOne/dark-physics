@@ -2,10 +2,10 @@
 # define H_DPHMC_CONFIGURATION_H
 
 # ifdef NDEBUG
-#   define dphmc_dbg_msg( mesage, ... ) \
-    { char bf[128]; snprintf(bf, sizeof(bf), message "\n", __VA_ARGS__ ); }
+#   define dphmc_dbg_msg( message, ... ) \
+    { char bf[128]; snprintf(bf, sizeof(bf), message "\n", ## __VA_ARGS__ ); }
 # else
-#   define dphmc_dbg_msg( mesage, ... ) /* debug message disabled*/
+#   define dphmc_dbg_msg( message, ... ) /* debug message disabled*/
 # endif
 
 # endif  // H_DPHMC_CONFIGURATION_H
