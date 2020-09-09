@@ -861,7 +861,7 @@ dphmc_aprime_ww_mj2( double x
                , E02 = caches->physPars.EBeam_GeV * caches->physPars.EBeam_GeV
                ;
     *valPtr = (1/(2 * E02 * ma2 * x * x))
-         / (mxx2 + mema2) ;
+              / (mxx2 + mema2) ;
     return 0;
 }
 
@@ -936,5 +936,4 @@ dphmc_aprime_ww_mj1_rev_theta( double u
     //return M_PI*sqrt( factor1/factor2 );
 }
 #endif
-
 
