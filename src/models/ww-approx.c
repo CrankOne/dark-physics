@@ -53,7 +53,6 @@ struct dphmc_APrimeWWCaches {
     double ma2  /* squared A' mass */
          , mema2  /* \f$ (m_e/m_{A'})^2 \f$ */
          , E02ma2  /* \f$ (E_0/m_{A'})^2 \f$ */
-         , mj2Scaling /* Integral value of \f$M_{2,x}\f$ */
          , xRange[2]  /*< x-range, for integration */
          , thetaMax  /*< maximum theta value, for integration */
          , integralEstVal  /*< according to (A16) */
@@ -149,8 +148,6 @@ dphmc_aprime_new( const struct dphmc_APrimePhysParameters * ps
         assert( caches->mema2 <= 1. );
         caches->E02ma2 = (caches->physPars.EBeam_GeV / caches->physPars.massA_GeV)
                        * (caches->physPars.EBeam_GeV / caches->physPars.massA_GeV);
-        caches->mj2Scaling = log(1/caches->mema2)
-                           / (2*caches->E02ma2*(1 - caches->mema2) * caches->ma2 * caches->ma2);
         /* lower x bound is determined from common sense -- mass threshold */
         caches->xRange[0] = caches->physPars.massA_GeV / caches->physPars.EBeam_GeV;
         /* upper x bound is defined by divergence of the cross section, -- see
@@ -852,6 +849,21 @@ dphmc_aprime_ww_mj2_rev_x( double u
     return 0;
 }
 
+/** The \f$M_{2,x}(x) > \f$\int\limits_{0}{\pi} M_{1,x} d \theta\f$ for
+ * $x \in [0:1]$ being thus a "majorant for integrated majorant". */
+int
+dphmc_aprime_ww_mj2( double x
+                         , const struct dphmc_APrimeWWCaches * caches
+                         , double * valPtr ) {
+    const double ma2 = caches->ma2
+               , mema2 = caches->mema2
+               , mxx2 = (1-x)/(x*x)
+               , E02 = caches->physPars.EBeam_GeV * caches->physPars.EBeam_GeV
+               ;
+    *valPtr = (1/(2 * E02 * ma2 * x * x))
+         / (mxx2 + mema2) ;
+    return 0;
+}
 
 /** Returns value of the "first" x-majorant (2D majorant integrated over theta):
  *
@@ -891,7 +903,7 @@ int
 dphmc_aprime_ww_mj1_sample_x( struct dphmc_URandomState * r
                             , const struct dphmc_APrimeWWCaches * caches
                             , double * xPtr ) {
-    double x, conjX, tVal;
+    double x, conjX, tVal, mj2Val;
     int rc;
     do {
         /* Generate a pair of random numbers */
@@ -901,7 +913,8 @@ dphmc_aprime_ww_mj1_sample_x( struct dphmc_URandomState * r
         DPHMC_RIF( dphmc_aprime_ww_mj2_rev_x( x, caches, &x ) );
         /* continue until second value is above the target distribution */
         DPHMC_RIF( dphmc_aprime_ww_mj1_x(x, caches, &tVal) );
-    } while( conjX > tVal / caches->mj2Scaling );
+        DPHMC_RIF( dphmc_aprime_ww_mj2(x, caches, &mj2Val) );
+    } while( conjX*mj2Val > tVal );
     *xPtr = x;
     return 0;
 }

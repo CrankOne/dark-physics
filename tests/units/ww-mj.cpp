@@ -1,57 +1,21 @@
-# include "models/ww-approx.h"
-# include "dphmc-rnd.h"
+# include "dphmc-test-mj-fixture.hpp"
 
 # include <gtest/gtest.h>
 
-class MajorantTest : public ::testing::Test {
+class MajorantTest : public ::testing::Test
+                   , public MajorantTestCommon {
 protected:
-    struct dphmc_IterativeQAGSParameters _integrPars;
-    struct dphmc_APrimePhysParameters _phPars;
-    struct dphmc_URandomState _rgs;
-    struct dphmc_APrimeWWCaches * _cachesPtr;
-public:
-    MajorantTest() : _cachesPtr(nullptr) {
-        // Physical parameters for tests
-        // WARNING: hardcoded static data in UTs were calculated using these
-        // parameters!
-        _phPars.Z = 74;
-        _phPars.A = 183.84;
-        _phPars.massA_GeV = .1;
-        _phPars.EBeam_GeV = 80;
-        _phPars.epsilon = 1e-4;
-        _phPars.factor = 1;
-        _phPars.maxThetaFactor = 1;
-        // Some default integration workspace parameters for \chi calculus
-        _integrPars.epsabs = 1e-12;
-        _integrPars.epsrel = 1e-12;
-        _integrPars.epsrelIncFt = 1.1;
-        _integrPars.limit = 1e3;
-        _integrPars.nnodes = 1e3;
-        // Initialize random number generator
-        dphmc_rnd_gen_gsl_init( &_rgs
-                              , gsl_rng_ranlux
-                              , 1337  // seed
-                              );
-    }
     virtual void SetUp() override {
-        _cachesPtr = dphmc_aprime_new( &_phPars
-                                     , &_integrPars
-                                     , dphmc_aprime_form_factor_elastic
-                                     , dphmc_aprime_form_factor_inelastic
-                                     , 0x0 );
+        init_caches();
     }
     virtual void TearDown() override {
-        // clear parametric caches
-        dphmc_aprime_delete( _cachesPtr );
-        _cachesPtr = nullptr;
-        // clear the random number generator
-        dphmc_rnd_gen_gsl_free( &_rgs );
+        free_caches();
     }
 };
 
 // Assure the x sampling of M_{x, 1} produces resonable results
 TEST_F( MajorantTest, x_chiSq_test ) {
-    size_t nSamples = 1e7;
+    size_t nSamples = 1e5;
     size_t histogram[100];
 
     size_t nBins = sizeof(histogram)/sizeof(*histogram);
@@ -67,10 +31,7 @@ TEST_F( MajorantTest, x_chiSq_test ) {
             ++histogram[int((nBins-1))];
         }
     }
-
-    for( int i = 0; i < nBins; ++i ) {
-        std::cout << i << " " << histogram[i]/((double) nSamples) << std::endl;
-    }
+    // ...
 }
 
 #if 0

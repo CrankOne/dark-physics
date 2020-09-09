@@ -16,6 +16,7 @@
 # include "dphmc-config.h"
 # include "dphmc-inspection.h"
 # include "dphmc-integrw.h"
+# include "dphmc-rnd.h"
 
 # include <stdlib.h>
 # include <stdint.h>
@@ -208,7 +209,12 @@ double dphmc_aprime_ww_integrated_a14( double x, const void * caches_ );
  * _______________________________/ Sampling \_________________________________
  */
 
-struct dphmc_URandomState;  // TODO
+#if 1
+/**\brief \f$M_{2,x}(x)\f$ -- a majorant 1D function for majorant 2D cross-section. */
+int
+dphmc_aprime_ww_mj2( double x
+                   , const struct dphmc_APrimeWWCaches * ws
+                   , double * valPtr );
 
 /**\brief Returns optimistic (according to x-majorant #2) value of \f$\tilde{x}\f$
  * for a random \f$u\f$ */
@@ -229,13 +235,13 @@ dphmc_aprime_ww_mj1_sample_x( struct dphmc_URandomState * uRandom
                             , const struct dphmc_APrimeWWCaches * caches
                             , double * xPtr );
 
-#if 0
 /**\brief Returns optimistic (according to 2D majorant #1) value of
  * \f$\tilde{\theta}\f$ for a random \f$u\f$ */
 double
 dphmc_aprime_ww_mj1_rev_theta( double u
                              , const struct dphmc_APrimeWWCaches * ws );
 #endif
+
 
 # ifdef __cplusplus
 }
