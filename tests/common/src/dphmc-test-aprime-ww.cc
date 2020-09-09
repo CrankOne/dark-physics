@@ -1,4 +1,4 @@
-# include "dphmc-test-aprime-ww.hpp"
+# include "dphmc-test-aprime-ww.hh"
 
 # include <stdexcept>
 # include <cassert>

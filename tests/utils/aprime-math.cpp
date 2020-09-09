@@ -7,7 +7,7 @@
 # include <cassert>
 # include <tuple>
 
-# include "dphmc-test-aprime-ww.hpp"
+# include "dphmc-test-aprime-ww.hh"
 
 namespace dphmc {
 namespace test {

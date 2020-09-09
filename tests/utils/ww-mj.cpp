@@ -1,4 +1,5 @@
-# include "dphmc-test-mj-fixture.hpp"
+# include "dphmc-test-fixture.hh"
+# include "dphmc-test-app.hh"
 
 # include <iostream>
 # include <cmath>

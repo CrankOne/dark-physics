@@ -1,7 +1,8 @@
-# include "dphmc-test-mj-fixture.hpp"
+# include "dphmc-test-fixture.hh"
 
 # include <gtest/gtest.h>
 
+#if 0
 class MajorantTest : public ::testing::Test
                    , public MajorantTestCommon {
 protected:
@@ -13,7 +14,6 @@ protected:
     }
 };
 
-#if 0
 // Assure the x sampling of M_{x, 1} produces resonable results
 TEST_F( MajorantTest, x_chiSq_test ) {
     size_t nSamples = 1e5;

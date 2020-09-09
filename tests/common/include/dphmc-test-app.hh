@@ -1,13 +1,22 @@
-#include "models/ww-approx.h"
+# ifndef H_DPHMC_TEST_FIXTURE_H
+# define H_DPHMC_TEST_FIXTURE_H
 
-#include <map>
-#include <string>
+# include "models/ww-approx.h"
 
-#include "models/ww-approx.hh"
+# include <map>
+# include <string>
+
+# include "models/ww-approx.hh"
 
 namespace dphmc {
 namespace test {
 
+/**\brief A parameters dictionary for testing applications
+ *
+ * This primitive parameters registry implements a (very basic) storage for
+ * user-defined parameters to shorten application code. It indexes parameters
+ * name versus the (value,description) pairs for setting and retrieval.
+ * */
 class ParametersSet : protected std::map<std::string, std::pair<double, std::string>> {
 public:
     /// Defines a parameter for further modification; may raise
@@ -35,6 +44,8 @@ void define_aprime_particle_parameters( ParametersSet & );
 void define_media_parameters( ParametersSet & );
 /// Adds epsilon, chiEpsAbs, chiEpsRel, chiEpsRelInc, chiLimit, chiNNodes
 void define_cross_section_parameters( ParametersSet & ps );
+/// Adds seed
+void define_rng_parameters( ParametersSet & ps );
 
 /// Reads the `APrimePhysParameters` values from parameters set (must have
 /// Z, A, ma, E0, epsilon)
@@ -46,6 +57,12 @@ void configure_phys_parameters( const ParametersSet & ps
 void configure_chiint_parameters( const ParametersSet & ps
                                 , IterativeQAGSParameters & );
 
+/// Initializes random number generator
+void configure_rng( const ParametersSet & ps
+                  , URandomState & rgs );
+
 }
 }
+
+# endif  // H_DPHMC_TEST_FIXTURE_H
 

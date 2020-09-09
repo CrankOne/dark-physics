@@ -45,4 +45,10 @@ int dphmc_rnd_gen_gsl_urandom_f( void *, double * );
 }
 # endif
 
+# ifdef __cplusplus
+namespace dphmc {
+typedef struct dphmc_URandomState URandomState;
+}
+# endif
+
 # endif  /* H_DPHMC_RANDOM_GEN_H */

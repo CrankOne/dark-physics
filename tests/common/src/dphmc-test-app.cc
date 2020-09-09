@@ -85,6 +85,14 @@ define_cross_section_parameters( ParametersSet & ps ) {
 }
 
 void
+define_rng_parameters( ParametersSet & ps ) {
+    ps.define( "seed"
+             , "Random number generator seed."
+             , 0 );
+    // ... type?
+}
+
+void
 configure_phys_parameters( const ParametersSet & ps
                          , aprime::PhysParameters & pp ) {
     pp.Z = ps["Z"];
@@ -106,6 +114,13 @@ configure_chiint_parameters( const ParametersSet & ps
     ip.nnodes = ps["chiNNodes"];
 }
 
+void
+configure_rng( const ParametersSet & ps
+             , URandomState & rgs ) {
+    dphmc_rnd_gen_gsl_init( &rgs, gsl_rng_ranlux
+                          , static_cast<int>(ps["seed"])
+                          );
+}
 
 }
 }
