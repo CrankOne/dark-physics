@@ -856,7 +856,7 @@ dphmc_aprime_ww_mj2_rev_x( double u
 /** Returns value of the "first" x-majorant (2D majorant integrated over theta):
  *
  * \f[
- * M_{x,1} = \frac{\pi^2 x}{2 m_{A'}^2} /
+ * M_{x,1} = \frac{\pi^2 }{2 m_{A'}^4 x} /
  *      (( \frac{m_e^2}{m_{A'}}^2 + \frac{1-x}{x^2} )
  *       ( (\frac{m_e^2}{m_{A'}}^2 + \frac{E_0^2}{m_{A'}^2} \pi^2) + \frac{1-x}{x^2} ))
  * \f]
@@ -870,7 +870,7 @@ dphmc_aprime_ww_mj1_x( double x
                , mema2 = caches->mema2
                , mxx2 = (1-x)/(x*x)
                , pi2 = M_PI*M_PI
-               , factor1 = pi2*x/(2*ma2)
+               , factor1 = pi2/(2*ma2*ma2*x)
                , factor2 = (mema2 + mxx2)
                , factor3 = (mema2 + caches->E02ma2 * pi2 + mxx2)
                ;
@@ -882,7 +882,7 @@ dphmc_aprime_ww_mj1_x( double x
  * to sample \f$\tilde{x}\f$ ("optimistic" \f$x\f$) according to \f$M_{x,1}(u)\f$
  * (defined by `dphmc_aprime_ww_mj1_x()`).
  *
- * Returned \f$\tilde{x}\f$ has to be used further as a prameter to first-order
+ * Returned \f$\tilde{x}\f$ has to be used further as a parameter to first-order
  * majorant \f$M_{x,theta,1}(x, \theta)\f$ to sample A' kinematics.
  *
  * \warning Since \f$M_{x,1}(u)\f$ and \f$M_{x,2}(u)\f$ are considered to be
