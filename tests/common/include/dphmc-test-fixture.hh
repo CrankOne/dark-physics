@@ -17,9 +17,9 @@ public:
     Fixture();
 
     /// Initializes random number generator
-    virtual void read_parameters();
+    virtual void init();
     /// Frees fixture's resources
-    virtual void free_resources();
+    virtual void clear();
 
     /// Returns parameters instance
     ParametersSet & parameters() { return _ps; }
@@ -30,6 +30,9 @@ public:
     URandomState & rng() { return _rgs; }
     /// Returns generator instance (cosnt)
     const URandomState & rng() const { return _rgs; }
+
+    /// Used by applications; parses parameter setting of the form <name=val>
+    int parse_parameter_setting(const std::string &);
 };
 
 class APrimePhysFixture : public Fixture {
@@ -39,7 +42,7 @@ public:
     APrimePhysFixture();
 
     /// Initializes physics parameters struct
-    virtual void read_parameters() override;
+    virtual void init() override;
 };
 
 class APrimeChiIntegrFixture : public APrimePhysFixture {
@@ -50,9 +53,9 @@ public:
     APrimeChiIntegrFixture();
 
     /// Initializes chi integrating parameters struct
-    virtual void read_parameters() override;
+    virtual void init() override;
     /// Deletes cache
-    virtual void free_resources() override;
+    virtual void clear() override;
 };
 
 }

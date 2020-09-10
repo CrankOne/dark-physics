@@ -56,8 +56,8 @@ dphmc_QAGS_integrate_iteratively( const struct dphmc_IterativeQAGSParameters * q
         } else if( !rr ) {
             break;  /* integrated correctly */
         } else {
-            DPhMC_msge( "Lower integration limit: %e", xLow );
-            DPhMC_msge( "Upper integration limit: %e", xUp );
+            DPhMC_msge( "Lower integration limit: %e (value %e)", xLow, f(xLow, ps) );
+            DPhMC_msge( "Upper integration limit: %e (value %e)", xUp, f(xUp, ps) );
             DPhMC_msge( "Current relative error: %e", *relErrPtr );
             DPhMC_error( DPHMC_THIRD_PARTY_ERROR
                        , "Got a gsl_integration_qags(...) error %d: \"%s\""

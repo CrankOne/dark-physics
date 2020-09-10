@@ -35,5 +35,11 @@ dphmc_QAGS_integrate_iteratively( const struct dphmc_IterativeQAGSParameters * q
 }
 # endif
 
+# ifdef __cplusplus
+namespace dphmc {
+typedef dphmc_IterativeQAGSParameters IterativeQAGSParameters;
+}
+# endif
+
 # endif  /* H_DPHMC_APRIME_WW_APPROX_MAJORANT_H */
 
