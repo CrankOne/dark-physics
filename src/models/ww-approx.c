@@ -385,7 +385,7 @@ dphmc_aprime_cross_section_variable_factor( double x
                , U2 = U*U
                , xm1 = 1 - x
                ;
-    return ( 1 - xm1*x*( .5 + am2*(xm1*am2/x - U)/U2 ) )*x/U2;
+    return ( 1 - xm1*x*( .5 + am2*(xm1*am2/x - U)/U2 ) )*x*sin(theta)/U2;
 }
 
 /**Calculates sigma according to (A12) formula \cite JDBjorken, returning

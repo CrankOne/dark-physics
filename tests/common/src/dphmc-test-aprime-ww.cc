@@ -8,30 +8,6 @@
 namespace dphmc {
 namespace test {
 
-
-
-ExpValues::ExpValues( size_t n_, double low_, double up_ )
-        : _nPoints(n_), _low(low_), _up(up_), _current(_low)
-        , _step( pow(_up/_low, 1./(_nPoints - 1)) ) {}
-
-double
-ExpValues::value() const {
-    return _current;
-}
-
-bool
-ExpValues::good() const {
-    return _current <= _up + _step*1e-9;
-}
-
-double
-ExpValues::operator++() {
-    _current *= _step;
-    return _current;
-}
-
-
-
 double
 chi_bjorken( double * x, double * p ) {
     const double EBeam = p[0],
