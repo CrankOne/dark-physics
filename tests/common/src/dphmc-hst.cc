@@ -4,6 +4,8 @@
 #include <cstring>
 #include <cmath>
 
+#include <iostream>  // XXX
+
 namespace dphmc {
 namespace test {
 
@@ -32,12 +34,12 @@ HistogramAxis::HistogramAxis( size_t nBins_, double vMin, double vMax )
             : nBins(nBins_)
             , range{vMin, vMax} {
     assert(nBins_);
-    assert(vMin < vMax);
+    assert(vMin != vMax);
 }
 
-size_t
+ssize_t
 HistogramAxis::value_to_nbin( double v ) const {
-    if( v == range[1] ) { return nBins-1; }
+    if( v == range[1] ) { return nBins - 1; }
     return (v - range[0])*nBins/(range[1] - range[0]);
 }
 
@@ -47,16 +49,18 @@ HistogramAxis::lower_bound( size_t n ) const {
 }
 
 
-HistogramLogAxis::HistogramLogAxis(size_t n, double min, double max) 
-    : HistogramAxis(n, min, max) {}
+HistogramLogAxis::HistogramLogAxis( size_t n, double min, double max ) 
+    : HistogramAxis( n, min, max ) {}
 
-size_t
+ssize_t
 HistogramLogAxis::value_to_nbin( double v ) const {
-    if( v == range[1] ) { return nBins-1; }
+    if( v == range[1] ) { return nBins - 1; }
+    if( v <  range[0] ) { return -1; }
     const double base = range[1]/range[0]
                , vl = v/range[0]
                ;
-    return (nBins - 1) * log(vl)/log(base);
+    ssize_t nBin = nBins * log(vl)/log(base);
+    return nBin;
 }
 
 double
@@ -83,7 +87,7 @@ Histogram<1>::~Histogram() {
 
 void
 Histogram<1>::fill(double v) {
-    size_t n = axis().value_to_nbin(v);
+    ssize_t n = axis().value_to_nbin(v);
     if(n < 0) {
         ++_underflow;
         return;
@@ -92,6 +96,18 @@ Histogram<1>::fill(double v) {
         ++_overflow;
         return;
     }
+    #if 0
+    if( axis().lower_bound(n) > v ) {
+        std::cerr << "v = " << v
+                  << ", n = " << n
+                  << ", low = " << axis().lower_bound(n)
+                  << ", up = " << axis().lower_bound(n+1)
+                  << std::endl
+                  ;
+    }
+    #endif
+    assert( axis().lower_bound(n  ) <= v );
+    assert( axis().lower_bound(n+1) >  v || v == axis().range[1] );
     ++_sum;
     ++_bins[n];
 }

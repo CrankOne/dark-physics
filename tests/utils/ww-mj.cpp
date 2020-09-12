@@ -235,11 +235,12 @@ MajorantTestingApp::run_mj2(const Sampler & sampler) {
     gsl_integration_workspace * mj1xIntWSPtr
         = gsl_integration_workspace_alloc( mj1xInt.nnodes );
 
+    const dphmc::test::HistogramAxis & axis = hst.axis();
     double mj1xNInt, mj1xNIntAbsErr, mj1xNIntRelErr, mj1NInt;
     mj1NInt = dphmc_QAGS_integrate_iteratively( &mj1xInt
                                 , _mj1fx_integrand
                                 , &sampler
-                                , 0, 1
+                                , axis.range[0], axis.range[1]
                                 , &mj1xNIntRelErr, &mj1xNIntAbsErr
                                 , mj1xIntWSPtr );
 
@@ -253,35 +254,40 @@ MajorantTestingApp::run_mj2(const Sampler & sampler) {
          ;
     double mj2SumCheck = 0.;
     double xChi2 = 0.;
-    const dphmc::test::HistogramAxis & axis = hst.axis();
     const int nBins = axis.nBins;
+    double checkS = 0;  // XXX
     for( int i = 0; i < nBins; ++i ) {
         double binLower = axis.lower_bound(i)
              , binUpper = axis.lower_bound(i+1)
              , x = (binUpper + binLower)/2
-             , nSimRatio = ((double) hst.bins()[i])/(hst.sum()*(binUpper-binLower))  // binned x-samples
+             , prob = ((double) hst.bins()[i])/(hst.sum())  // binned x-samples
              //, nSimRatio = (rand()/((double) RAND_MAX))/hst.sum()  // to assure chi^2 broken
              , deviation  // deviation to compute \chi^2
              ;
+        checkS += prob;  // XXX
         mj1xNInt = dphmc_QAGS_integrate_iteratively( &mj1xInt
                                 , _mj1fx_integrand
                                 , &sampler
                                 , binLower, binUpper
                                 , &mj1xNIntRelErr, &mj1xNIntAbsErr
-                                , mj1xIntWSPtr ) / mj1NInt;
-        deviation = nSimRatio - mj1xNInt;
+                                , mj1xIntWSPtr )/mj1NInt;
+        deviation = prob - mj1xNInt;
         xChi2 += deviation*deviation/mj1xNInt;
         mjxf << std::scientific
             << std::setw(14) << binLower << " "
             << std::setw(14) << binUpper << " "
-            << std::setw(14) << sampler.mj1(x)/(nBins*sampler.mj2Norm) << " "
-            << std::setw(14) << sampler.mj2(x)/(nBins*sampler.mj2Norm) << " "
-            << std::setw(14) << nSimRatio << " "
+            << std::setw(14) << x << " "
+
+            << std::setw(14) << sampler.mj1(x)/(sampler.mj2Norm) << " "
+            << std::setw(14) << sampler.mj2(x)/(sampler.mj2Norm) << " "
+            << std::setw(14) << prob << " "
+            << std::setw(14) << prob*(mj1NInt/sampler.mj2Norm)/(binUpper-binLower) << " "
             << std::setw(14) << mj1xNInt << " "
             << std::setw(14) << mj1xNIntRelErr << " "
             << std::setw(14) << mj1xNIntAbsErr
             << std::endl;
     }
+    std::cout << "xxx " << checkS << std::endl;  // XXX
     xChi2 *= hst.sum();
     // To accept hypothesis of the values being distributed wrt given law
     // the calculated chi^2 must be < ch_{crit}^2
