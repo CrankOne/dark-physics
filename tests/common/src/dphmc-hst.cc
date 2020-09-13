@@ -150,7 +150,7 @@ Histogram<2>::fill(double v1, double v2) {
         return;
     }
     ++_sum;
-    ++_bins[n1*axis1().nBins + n2];
+    ++_bins[n1*axis2().nBins + n2];
 }
 
 size_t &

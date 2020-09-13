@@ -1,0 +1,13 @@
+#mjxf='/home/crank/Projects/cern/na64/ecal-excercises/dark-physics.build/mj-tests.d/mjx.dat'
+mjxf='/home/crank/Projects/cern/na64/dark-physics.build/mj-test.d/mj2-inv.dat'
+nSamples=50.
+
+set log xy
+
+plot mjxf u (1. - $3):4 title 'M_{1,x}(x)' w lines \
+   , mjxf u (1. - $3):5 title 'M_{2,x}(x)' w lines \
+   , mjxf u (1. - $3):6 w linespoints title 'simulated freq' \
+   , mjxf u (1. - $3):7 w linespoints title 'simulated prob' \
+   , mjxf u (1. - $3):8 w lines lw 3 title 'num.integr.'
+
+pause mouse close

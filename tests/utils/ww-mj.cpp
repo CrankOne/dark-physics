@@ -105,11 +105,11 @@ public:
         double x
              , mxx2
              ;
-        double m1, m2, conjX;
+        double m1, m2, probe;
         do {
             // Generate a pair of random numbers
             URANDOM(x);
-            URANDOM(conjX);
+            URANDOM(probe);
             // Map one uniform random variable from pair to x wrt M_{2,x}(x)
             // using reverse transform method:
             //  x = \frac{1}{2 E_0} \frac{1-(m_e/m_{A'})^{2 u}}{1-(m_e/m_{A'})^{2}}
@@ -118,7 +118,7 @@ public:
             m1 = mj1(x);
             // ... and current M_{2,x}(x) value.
             m2 = mj2(x);
-            if( conjX*m2 <= m1 ) {
+            if( probe*m2 <= m1 ) {
                 return x;
             }
         } while(true);
@@ -142,8 +142,10 @@ public:
 
     /** Returns value of \f$M_{1}(x, \theta)\f$ */
     double mj1(double x, double theta) const {
-        const double mxx2 = (1-x)/(x*x);
-        return x*theta / (E02ma2 * theta * theta + mxx2 + mema2 );
+        const double mxx2 = (1-x)/(x*x)
+                   , factor1 = ma2*(E02ma2 * theta * theta + mxx2 + mema2)
+                   ;
+        return theta / (x*factor1*factor1);
     }
 
     double reference_f( double x, double theta ) const {
@@ -151,9 +153,10 @@ public:
                    , U = E02*theta*theta*x + ma2*xm1/x + me*me*x
                    , U2 = U*U
                    ;
-        return ((1 - x + x*x/2)/U2 + ma2*(
-                        xm1*xm1*ma2 - xm1*U*x
-                    )/(U2*U2))*x*sin(theta);
+        return ( (xm1 + x*x/2)/U2
+               + ma2*xm1*(ma2*xm1 - U*x
+                         )/(U2*U2)
+               )*x*sin(theta);
     }
 
     /** Samples point and returns reference value at this point */
@@ -170,7 +173,7 @@ public:
             URANDOM(probe);
             // test triplet
             reference = reference_f(x, theta);
-            if( true /*probe*mj1(x, theta) <= reference*/ ) {  // TODO
+            if( probe*mj1(x, theta) <= reference ) {
                 // within a target function -- accept:
                 xRef = x;
                 thetaRef = theta;
@@ -186,6 +189,7 @@ public:
               , mj1File  ///< when non-empty, the mj1 .dat will be generated
               ;
     int nx, ny, nSamples;
+    bool invX;
 
     MajorantTestingApp();
 
@@ -202,7 +206,7 @@ private:
     }
 };
 
-MajorantTestingApp::MajorantTestingApp() : nx(100), ny(100), nSamples(1e6) {
+MajorantTestingApp::MajorantTestingApp() : nx(100), ny(100), nSamples(1e6), invX(false) {
     parameters().define( "E0", "Incident energy (GeV)", 8e1 );
     parameters().define( "ma", "Mass of A' particle (GeV)", 0.04 );
 }
@@ -226,7 +230,11 @@ MajorantTestingApp::run_mj2(const Sampler & sampler) {
     dphmc::test::Histogram<1> hst(nx, 1e-3, 1, true);
     double x;
     for( int i = 0; i < nSamples; ++i ) {
-        hst.fill( sampler.sample_x_mj1(&_rgs) );
+        if( !invX ) {
+            hst.fill( sampler.sample_x_mj1(&_rgs) );
+        } else {
+            hst.fill( 1. - sampler.sample_x_mj1(&_rgs) );
+        }
     }
 
     std::ofstream mjxf( mj2File );
@@ -240,7 +248,8 @@ MajorantTestingApp::run_mj2(const Sampler & sampler) {
     mj1NInt = dphmc_QAGS_integrate_iteratively( &mj1xInt
                                 , _mj1fx_integrand
                                 , &sampler
-                                , axis.range[0], axis.range[1]
+                                , !invX ? axis.range[0] : 1. - axis.range[1]
+                                , !invX ? axis.range[1] : 1. - axis.range[0]
                                 , &mj1xNIntRelErr, &mj1xNIntAbsErr
                                 , mj1xIntWSPtr );
 
@@ -255,24 +264,28 @@ MajorantTestingApp::run_mj2(const Sampler & sampler) {
     double mj2SumCheck = 0.;
     double xChi2 = 0.;
     const int nBins = axis.nBins;
-    double checkS = 0;  // XXX
     for( int i = 0; i < nBins; ++i ) {
         double binLower = axis.lower_bound(i)
              , binUpper = axis.lower_bound(i+1)
              , x = (binUpper + binLower)/2
              , prob = ((double) hst.bins()[i])/(hst.sum())  // binned x-samples
              //, nSimRatio = (rand()/((double) RAND_MAX))/hst.sum()  // to assure chi^2 broken
-             , deviation  // deviation to compute \chi^2
+             , probDeviation  // deviation to compute \chi^2
              ;
-        checkS += prob;  // XXX
+        if( invX ) {
+            x = 1. - x;
+            std::swap(binLower, binUpper);
+            binLower = 1. - binLower;
+            binUpper = 1. - binUpper;
+        }
         mj1xNInt = dphmc_QAGS_integrate_iteratively( &mj1xInt
                                 , _mj1fx_integrand
                                 , &sampler
                                 , binLower, binUpper
                                 , &mj1xNIntRelErr, &mj1xNIntAbsErr
                                 , mj1xIntWSPtr )/mj1NInt;
-        deviation = prob - mj1xNInt;
-        xChi2 += deviation*deviation/mj1xNInt;
+        probDeviation = prob - mj1xNInt;
+        xChi2 += probDeviation*probDeviation/mj1xNInt;
         mjxf << std::scientific
             << std::setw(14) << binLower << " "
             << std::setw(14) << binUpper << " "
@@ -287,7 +300,6 @@ MajorantTestingApp::run_mj2(const Sampler & sampler) {
             << std::setw(14) << mj1xNIntAbsErr
             << std::endl;
     }
-    std::cout << "xxx " << checkS << std::endl;  // XXX
     xChi2 *= hst.sum();
     // To accept hypothesis of the values being distributed wrt given law
     // the calculated chi^2 must be < ch_{crit}^2
@@ -301,6 +313,56 @@ MajorantTestingApp::run_mj2(const Sampler & sampler) {
     gsl_integration_workspace_free( mj1xIntWSPtr );
 }
 
+// GSL function wrapper for majorant #1 as integrand
+static double
+gsl_wrapper_mj1( double * x, size_t dim, void * sampler_ ) {
+    const Sampler * samplerPtr = reinterpret_cast<Sampler*>(sampler_);
+    return samplerPtr->mj1( x[0], x[1] );
+}
+
+// GSL function wrapper for target sampled function as integrand
+static double
+gsl_wrapper_var_cs( double * x, size_t dim, void * sampler_ ) {
+    const Sampler * samplerPtr = reinterpret_cast<Sampler*>(sampler_);
+    return samplerPtr->reference_f( x[0], x[1] );
+}
+
+static double
+n_integrate_var_cs( double (*f)(double *, size_t, void *)
+                  , double xLow, double xUp
+                  , double thetaLow, double thetaUp
+                  , gsl_monte_vegas_state *& gmvstPtr
+                  , gsl_rng * r
+                  , const Sampler & samplerRef
+                  , double & absError
+                  , double & chi2
+                  , size_t nCalls
+                  ) {
+    int rc = gsl_monte_vegas_init( gmvstPtr );
+    assert( GSL_SUCCESS == rc );
+    if( ! gmvstPtr ) {
+        gmvstPtr = gsl_monte_vegas_alloc(2);
+        rc = gsl_monte_vegas_init( gmvstPtr );
+    }
+    gsl_monte_function F = { f, 2
+                           , const_cast<Sampler *>(&samplerRef)
+                           };
+    double ranges[] = { xLow, thetaLow
+                      , xUp, thetaUp
+                      };
+    double result, absError_;
+    gsl_monte_vegas_integrate( &F
+                             , ranges
+                             , ranges + 2
+                             , 2
+                             , nCalls  // nCalls
+                             , r
+                             , gmvstPtr
+                             , &result, &absError );
+    chi2 = gsl_monte_vegas_chisq(gmvstPtr);
+    return result;
+}
+
 void
 MajorantTestingApp::run_mj1(const Sampler & sampler) {
     dphmc::test::Histogram<2> hst( nx, 0, 1, false
@@ -310,21 +372,118 @@ MajorantTestingApp::run_mj1(const Sampler & sampler) {
     for( int i = 0; i < nSamples; ++i ) {
         sampler.sample_x_theta(&_rgs, x, theta);
         //std::cout << x << ", " << theta << std::endl;  // XXX
-        hst.fill( x, theta );
+        if( !invX ) {
+            hst.fill( x, theta );
+        } else {
+            hst.fill( 1. - x, theta );
+        }
     }
 
-    const size_t n1Bins = hst.axis1().nBins
-               , n2Bins = hst.axis2().nBins
+    const size_t nXBins = hst.axis1().nBins
+               , nThetaBins = hst.axis2().nBins
                ;
 
-    std::ostream & mjf = std::cout;  //std::ofstream(mj1File);  // TODO
+    std::ofstream  mjf = std::ofstream("majorant1.dat")
+                , reff = std::ofstream("reference.dat")
+                , rfpf = std::ofstream("prob-reference.dat")
+                , smpf = std::ofstream("prob-simulated.dat")
+                ;
+    mjf << std::scientific;
+    reff << std::scientific;
 
-    for( size_t i = 0; i < n1Bins; ++i ) {
-        for( size_t j = 0; j < n2Bins; ++j ) {
-            mjf << hst(i,j) << " ";
+    // Calc full integral over the mj1 -> mj1Norm
+    double mj1Norm
+         , mj1NormErr
+         , mj1NormChi2
+         , ctrlRefInt = 0
+         , ctrlSample = 0
+         ;
+    gsl_monte_vegas_state * gmvstPtr = gsl_monte_vegas_alloc(2);
+    mj1Norm = n_integrate_var_cs( gsl_wrapper_var_cs
+                                , hst.axis1().range[0], hst.axis1().range[1]  // TODO: xInv
+                                , hst.axis2().range[0], hst.axis2().range[1]
+                                , gmvstPtr
+                                , (gsl_rng*) _rgs.statePtr
+                                , sampler
+                                , mj1NormErr
+                                , mj1NormChi2
+                                , 1000000
+                                );
+
+    double mj1Chi2 = 0.
+         , csSubInt
+         , csSubErr, csSubChi2
+         ;
+    for( size_t i = 0; i < hst.axis1().nBins; ++i ) {
+        double xLow = hst.axis1().lower_bound(i)
+             , xUp = hst.axis1().lower_bound(i+1)
+             , x = (xLow + xUp)/2;
+             ;
+        if( invX ) {
+            x = 1. - x;
+            std::swap(xLow, xUp);
+            xLow = 1. - xLow;
+            xUp = 1. - xUp;
+        }
+        for( size_t j = 0; j < hst.axis2().nBins; ++j ) {
+            double thetaLow = hst.axis2().lower_bound(j)
+                 , thetaUp = hst.axis2().lower_bound(j+1)
+                 , theta = (thetaLow + thetaUp)/2
+                 , prob = ((double) hst(i, j))/(hst.sum())
+                 , probDeviation
+                 ;
+            ctrlSample += prob;
+
+            csSubInt = n_integrate_var_cs( gsl_wrapper_var_cs
+                                , xLow, xUp  // TODO: xInv
+                                , thetaLow, thetaUp
+                                , gmvstPtr
+                                , (gsl_rng*) _rgs.statePtr
+                                , sampler
+                                , csSubErr
+                                , csSubChi2
+                                , 10000
+                                );
+            ctrlRefInt += csSubInt;
+            csSubInt /= mj1Norm;
+            probDeviation = prob - csSubInt;
+            mj1Chi2 += probDeviation*probDeviation/csSubInt;
+
+            // Histogram of samples
+            smpf << std::setw(14) << x << " "
+                << std::setw(14) << theta << " "
+                << std::setw(14) << prob/*((thetaUp - thetaLow)*(xUp - xLow))*/ << std::endl;
+
+            // Integrated probability
+            rfpf << std::setw(14) << x << " "
+                 << std::setw(14) << theta << " "
+                 << std::setw(14) << csSubInt << std::endl;
+
+            // Majorant #1 surface
+            mjf << std::setw(14) << x << " "
+                << std::setw(14) << theta << " "
+                << std::setw(14) << sampler.mj1(x, theta) << std::endl;
+
+            // Reference function surface (CS variative factor)
+            reff << std::setw(14) << x << " "
+                 << std::setw(14) << theta << " "
+                 << std::setw(14) << sampler.reference_f(x, theta) << std::endl;
+
+            #if 0
+            // Freq
+            frqf << std::setw(14) << x << " "
+                 << std::setw(14) << theta << " "
+                 << std::setw(14) << /*csSubInt*/ sampler.reference_f(x, theta) << std::endl;
+            #endif
         }
         mjf << std::endl;
+        reff << std::endl;
+        rfpf << std::endl;
+        smpf << std::endl;
     }
+    gsl_monte_vegas_free( gmvstPtr );
+    std::cout << "Control sums: num.int.sum/num.int.=" << ctrlRefInt / mj1Norm
+              << ", prob.sum=" << ctrlSample << std::endl;
 }
 
 void
@@ -351,7 +510,7 @@ usage_info( std::ostream & os
        << " ./mj1x.dat " << std::endl
        ;
     os << "Parameters"
-          " available for modification by `-D` option:" << std::endl;
+          " available for modification by `-D,--set-value` option:" << std::endl;
     app.parameters().print_references(os);
     os << std::endl;
 }
@@ -362,9 +521,9 @@ configure_app( int argc, char * argv[]
 
     static struct option longOpts[] = {
         { "help",               no_argument,        NULL, 'h' },
-        { "set",                optional_argument,  NULL, 'D' },
-        { "dir",                required_argument,  NULL, 'o' },
+        { "set-value",          optional_argument,  NULL, 'D' },
         { "n-samples",          required_argument,  NULL, 'n' },
+        { "x-1",                no_argument,        NULL,  0  },
         // ...
         { NULL, 0x0, NULL, 0x0 },
     };
@@ -380,11 +539,16 @@ configure_app( int argc, char * argv[]
     while((c = getopt_long( argc, argv, "h2D:N:n:"
                           , longOpts, &optIdx )) != -1) {
         switch(c) {
-            case '0' :
-                std::cerr << "Unable to parse option \""
-                          << longOpts[optIdx].name << "\""  << std::endl;
+            case 0:
+                if( !strcmp("x-1", longOpts[optIdx].name) ) {
+                    app.invX = true;
+                } else {
+                    std::cerr << "Unable to parse option \""
+                              << longOpts[optIdx].name << "\""  << std::endl;
+                    return -1;
+                }
                 break;
-            case 'd' :
+            case 'D' :
                 if( 0 != app.parse_parameter_setting(optarg) ) {
                     std::cerr << "Unable to parse \"" << optarg << "\"" << std::endl;
                     return -1;
